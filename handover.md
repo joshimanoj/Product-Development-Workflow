@@ -10,11 +10,11 @@ Claude's context window is finite. The handover system ensures zero knowledge lo
 
 At the start of every session, Claude performs a warm-start in five steps:
 
-1. **Check for `.claude/state.json` first.** This is the precise mechanical state — story number, last completed task, FT statuses, next command. If present, read it and hold in memory.
-2. **Check for `HANDOVER.md`.** Read only the most recent checkpoint block (the last `## Checkpoint` entry) for narrative context — decisions made, debt carried forward. If `HANDOVER.md` is missing or empty and `state.json` is also missing, refuse to proceed: warn "No session state found — context from your previous session may be lost. Confirm current story and task manually before continuing." Do not proceed silently.
-3. **If `state.json` is missing but `HANDOVER.md` exists**, warn: "`state.json` not found — task-level state may be lost. Reconstructing from HANDOVER.md checkpoint. Verify current task before running /dev." Do not silently assume state.
-4. **Set active context in memory** — active story number and name, next command, last completed task, FT statuses, warnings and debt. Do not re-read `Sprint.md`, `architecture.md`, or any other project file unless the human explicitly asks.
-5. **Greet the human with a one-line status summary and a ready prompt** — for example: "Last checkpoint: Story #3 Sign-up flow — Task 4 complete, FT-1 green, FT-2 red. Ready for /dev 5. Say 'continue' to proceed, or ask me anything."
+1. **Check for `.claude/state.json` first.** This is the precise mechanical state — epic number, active story, last completed task, track B statuses, next command. If present, read it and hold in memory.
+2. **Check for `HANDOVER.md`.** Read only the most recent checkpoint block (the last `## Checkpoint` entry) for narrative context — decisions made, debt carried forward. If `HANDOVER.md` is missing or empty and `state.json` is also missing, refuse to proceed: warn "No session state found — context from your previous session may be lost. Confirm current epic and story manually before continuing." Do not proceed silently.
+3. **If `state.json` is missing but `HANDOVER.md` exists**, warn: "`state.json` not found — task-level state may be lost. Reconstructing from HANDOVER.md checkpoint. Verify current epic and story before running /dev." Do not silently assume state.
+4. **Set active context in memory** — active epic number and name, active story number, next command, last completed task, track B statuses, warnings and debt. Do not re-read `Sprint.md`, `architecture.md`, or any other project file unless the human explicitly asks.
+5. **Greet the human with a one-line status summary and a ready prompt** — for example: "Last checkpoint: Epic #1 Account Creation — Story #3 complete, FT-1 red, FT-2 red. Ready for /dev task 5 on Story #3. Say 'continue' to proceed, or ask me anything."
 
 ---
 
@@ -22,39 +22,40 @@ At the start of every session, Claude performs a warm-start in five steps:
 
 ### Layer 1 — `.claude/state.json` (written per `/dev` task)
 
-After every `/dev` task commit, Claude writes `.claude/state.json`. This is the precise mechanical state — updated at task granularity so a mid-story session crash loses at most one task. Claude writes this directly, no script or subprocess.
+After every `/dev` task commit, Claude writes `.claude/state.json`. This is the precise mechanical state — updated at task granularity so a mid-epic session crash loses at most one task. Claude writes this directly, no script or subprocess.
 
 ```json
 {
-  "story": 3,
-  "story_name": "Child Profile Setup",
-  "branch": "feature/story-3-child-profile-web",
+  "epic": 1,
+  "epic_name": "Account Creation",
+  "branch": "feature/epic-1-account-creation",
+  "active_story": 3,
   "last_completed_task": 4,
   "next_task": 5,
-  "track_b_status": {"FT-1": "green", "FT-2": "red", "FT-3": "red"},
+  "track_b_status": {"FT-1": "red", "FT-2": "red", "FT-3": "red"},
   "next_command": "/dev 5",
   "timestamp": "2026-03-20T14:32:00"
 }
 ```
 
-### Layer 2 — `HANDOVER.md` Checkpoint (written per `/check` pass)
+### Layer 2 — `HANDOVER.md` Checkpoint (written per epic merge)
 
-After every successful `/check` pass, Claude appends a checkpoint block directly to `HANDOVER.md`. No script, no subprocess — Claude writes from its own current context. This carries narrative context that `state.json` does not: decisions made, debt deferred, architectural notes.
+After every epic merges (at the end of `/uat` After Approval, or at the end of `/check` Phase 7 for backend epics), Claude appends a checkpoint block directly to `HANDOVER.md`. No script, no subprocess — Claude writes from its own current context. This carries narrative context that `state.json` does not: decisions made, debt deferred, architectural notes.
 
 ```markdown
 ---
 
-## Checkpoint: Story #X [name] | [YYYY-MM-DD HH:MM] | /check PASSED
+## Checkpoint: Epic #N [name] | Stories #[first]–#[last] | [YYYY-MM-DD HH:MM] | MERGED ✅
 
-Story complete: [one sentence — what was built]
+Epic complete: [one sentence — what the user can now do]
 
 Files changed: [list]
 
-Decisions made: [read story-change-log.md and extract every entry for Story #X — copy Deviation type, What happened, and Impact fields verbatim. If no entries exist for this story, write "none."]
+Decisions made: [read story-change-log.md and extract every entry for stories in this epic — copy Deviation type, What happened, and Impact fields verbatim. If no entries exist, write "none."]
 
 Warnings / debt: [linting warnings deferred, known issues, anything not to repeat]
 
-Next: [next story number and name] | Ready for: /uat (UI) | /prd (Backend)
+Next: Epic #[N+1] [name] | Ready for: /prd
 ```
 
 ---
@@ -115,9 +116,9 @@ Mental Context: [in-flight logic not yet coded]
 ### Automatic — Primary: Two-Layer State
 
 **Layer 1:** Claude writes `.claude/state.json` at the end of every `/dev` task commit. No script, no subprocess.
-**Layer 2:** Claude appends a checkpoint block to `HANDOVER.md` at the end of every successful `/check` pass. No script, no subprocess.
+**Layer 2:** Claude appends a checkpoint block to `HANDOVER.md` at the end of every epic merge — at the end of `/uat` After Approval (UI epics) or `/check` Phase 7 (backend epics). No script, no subprocess.
 
-The PreCompact hook in `.claude/settings.local.json` acts as a fallback only: it checks whether `HANDOVER.md` was updated this session and spawns a subprocess only if no checkpoint exists yet. Under normal workflow it does nothing — `/check` already appended a checkpoint and `/dev` already updated `state.json`.
+The PreCompact hook in `.claude/settings.local.json` acts as a fallback only: it checks whether `HANDOVER.md` was updated this session and spawns a subprocess only if no checkpoint exists yet. Under normal workflow it does nothing — the epic merge already appended a checkpoint and `/dev` already updated `state.json`.
 
 ### Manual — /handover Command
 
@@ -138,7 +139,7 @@ Under normal workflow this script does nothing, because `/check` already appende
 import datetime, os, subprocess
 
 def safety_net_handover():
-    # Exit immediately if /check already wrote a checkpoint this session
+    # Exit immediately if epic merge already wrote a checkpoint this session
     handover = "HANDOVER.md"
     if os.path.exists(handover):
         mtime = os.path.getmtime(handover)

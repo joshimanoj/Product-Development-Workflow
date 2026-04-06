@@ -2,24 +2,25 @@
 
 ## Purpose
 
-For the active story, break it into atomic 5–10 minute tasks. For every task produce a technical blueprint with exact file changes and test plans. Critically, also generate functional test specs (Track B) that are written first in RED, committed alongside the implementation, and must be GREEN before `/check` can proceed.
+For the active epic, read all its stories and break them into atomic 5–10 minute tasks. For every task produce a technical blueprint with exact file changes and test plans. Generate functional test specs (Track B) and NFR test specs (Track C) written RED upfront — these accumulate across all stories and run together at epic-level `/check`. Track B and Track C tests are never run during `/dev` — they are written RED and committed, execution is deferred to `/check`.
 
 ---
 
 ## Pre-Flight Check
 
-- **`story-N.md`** — active story file (full acceptance criteria, user flows, story type, and embedded blueprint Zones tables in Design References)
-- **`architecture.md`** — architecture patterns, naming conventions
-- **`theme.json`**, **`ui-patterns-[platform].md`**, **`component-behavior-guide.md`** — for UI stories; used to generate `story-N-ui-context.md`. The blueprint content for this story is already embedded in `story-N.md` Design References — do not re-read the full blueprint file.
+- **`epic-N.md`** — active epic file (story list, AC summaries, cross-story notes, suggested order)
+- **`story-N.md` files** — full story detail for each story in the epic (read one at a time during task generation)
+- **`architecture.md`** — architecture patterns, naming conventions, Section 8 Critical Paths + Track C tooling
+- **`theme.json`**, **`ui-patterns-[platform].md`**, **`component-behavior-guide.md`** — for UI stories; used to generate `story-N-ui-context.md` files
 
 Show the user a pre-flight summary and wait for confirmation before generating tasks.
 
 ```
-Branch: feature/story-N-{slug}-{pass} (created/confirmed ✓)
-Story #X: [name] | Type: UI | Backend
-Will modify: [files] | Will create: [files]
+Branch: feature/epic-N-{slug} (created/confirmed ✓)
+Epic #N: [name] | Stories: #[first]–#[last] | Type: UI | Backend | Mixed
+Stories: [N total — list titles]
 Tech stack: [language / framework / test runner]
-~[N] implementation tasks + [M] functional test tasks
+~[N] implementation tasks + [M] Track B tests + [P] Track C tests across all stories
 Proceed?
 ```
 
@@ -43,9 +44,47 @@ Auto-detect from project config files. Claude should apply the same detection lo
 
 ---
 
-## Phase 2: Task Breakdown
+## Phase 2: AC Classification Pass
 
-Two tracks planned upfront. Both appear in `task_spec_document.md` and `TODO.md`.
+**This pass happens before any tasks are written.** Read `epic-N.md` to understand the full epic scope and cross-story notes. Then read each `story-N.md` in the suggested order from `epic-N.md`. For every acceptance criterion across all stories, classify it into exactly one category. No AC may be left unclassified. If classification is unclear, resolve with the human before proceeding.
+
+| AC Type | UI story | Backend story |
+|---------|----------|---------------|
+| Functional criterion | Track B FT (one per criterion) | Track A unit/integration test (explicit — not assumed) |
+| Edge case | Track B FT (own test — never bundled with happy path) | Track A unit test (own test — never bundled) |
+| NFR — automatable | Track C (assign tool from architecture.md Section 8 Track C tooling) | Track C (same — story type is irrelevant for NFRs) |
+| NFR — E2E testable (e.g. offline, slow network) | Track B with conditions (e.g. Playwright network throttle) | Track B with conditions |
+| NFR — subjective / human judgment only | UAT-only — document reason, get human confirmation now | UAT-only — document reason, get human confirmation now |
+
+Also identify cross-story Track B tests at this stage — user journeys that span multiple stories (e.g. sign up → verify email → first login). These are additional Track B tests beyond the per-story ones, written here and run at epic CHECK.
+
+Present the full classification table grouped by story, plus cross-story tests, and wait for human confirmation:
+
+```
+AC Classification — Epic #N:
+
+Story #1: [Title]
+  AC-1 [Functional]: "User sees confirmation on submit" → Track B FT
+  AC-2 [Edge case]: "Form rejected when email is blank" → Track B FT
+  AC-3 [NFR — automatable]: "API response < 200ms p95" → Track C (k6)
+
+Story #2: [Title]
+  AC-4 [Functional]: "..." → Track B FT
+  ...
+
+Cross-story flows:
+  Flow 1: Sign up → verify email → first login → Track B FT (spans stories #1, #2, #3)
+
+Confirm?
+```
+
+Human must confirm before proceeding to task generation.
+
+---
+
+## Phase 3: Task Breakdown
+
+Three tracks planned upfront across all stories in the epic. All appear in `task_spec_document.md` and `TODO.md`, sectioned by story.
 
 ### Track A — Implementation Tasks
 
@@ -74,11 +113,11 @@ Implementation Notes:
   [Patterns from architecture.md / dependencies / integration points]
 ```
 
-### Track B — Functional Test Tasks (UI stories only)
+### Track B — Functional Test Tasks
 
-For every acceptance criterion in `story-N.md`, define one functional test task. Written FIRST in RED before any implementation. Committed alongside feature code. Must be GREEN before `/check` proceeds.
+For every functional criterion and edge case AC across all stories in the epic (UI and backend — see classification table above), define one functional test task. Also include cross-story flow tests identified in the Phase 2 classification pass. Written RED — committed alongside implementation, executed at epic-level `/check`. `/dev` writes them RED and moves on — it does not run them.
 
-**Hard rule: gaps are resolved at /prd time, not discovered at /check time.** Before writing any FT, read each acceptance criterion from `story-N.md` and apply this resolution logic:
+**Hard rule: gaps are resolved at /prd time, not discovered at /check time.** Before writing any FT, apply this resolution logic:
 
 - **Testable, maps cleanly to a user-facing behaviour** → write the FT, proceed.
 - **Testable but requires infrastructure that does not yet exist** (e.g. emulator, seed helpers, auth test hooks, mock server) → add a Track A prerequisite task for that infrastructure first, then write the FT.
@@ -90,6 +129,7 @@ Do not write a stub that can never pass. Do not defer gaps to `/check` — a gap
 ### Functional Test Task FT-N: [Acceptance Criterion]
 
 Criterion (from story-N.md): [exact text]
+AC type: Functional | Edge case
 Test File: e2e/[story-name]/[criterion-slug].spec.ts
 Framework: [Playwright / Detox / XCUITest / patrol]
 
@@ -111,47 +151,121 @@ Component Behavior Tests (UI stories — ref Component Behavior Guide):
 Initial Status: RED (expected — implementation not yet written)
 ```
 
----
+### Track C — NFR Test Tasks
 
-## Phase 3: TODO.md — Task Ordering
+For every NFR AC classified as automatable or E2E-testable across all stories in the epic, define one Track C test task. Written RED alongside Track B — executed at epic-level `/check`. `/dev` writes them RED and moves on — it does not run them.
 
-Functional tests (FT-N) are written FIRST and start RED. They go GREEN naturally as implementation tasks complete. No story is ready for `/check` until all FT tasks are also GREEN.
+**Tooling must come from architecture.md Section 8 Track C tooling — do not invent tooling at this stage.** If the required tool is not listed in architecture.md Section 8, stop and ask the human to update architecture.md before proceeding.
 
 ```markdown
-# Story #X: [Name] | Type: UI | Backend
+### NFR Test Task TC-N: [NFR Criterion]
 
-## Track B — Functional Tests (write first, start RED)
+Criterion (from story-N.md): [exact text]
+AC type: NFR — automatable | NFR — E2E testable
+Tool: [from architecture.md Section 8 Track C tooling — e.g. k6 / axe-core / Lighthouse CI]
+Test File: [e.g. tests/performance/story-N-load.js | e2e/story-N/offline.spec.ts]
+Run command: [exact command]
+Pass condition: [explicit, measurable threshold — e.g. p95 < 200ms | 0 axe violations | Lighthouse score ≥ 90]
 
-- [ ] FT-1: [Criterion 1] — e2e/story-x/criterion-1.spec.ts — 8 min
-- [ ] FT-2: [Criterion 2] — e2e/story-x/criterion-2.spec.ts — 6 min
+Setup required:
+[Any Track A prerequisite tasks needed before this test can run — e.g. "seed 1000 records", "configure k6 env vars"]
 
-## Track A — Implementation Tasks
+Initial Status: RED (expected — implementation not yet written)
+```
+
+---
+
+## Phase 3: Completeness Reverse-Trace
+
+After generating all tracks, Claude performs an explicit reverse-trace before presenting tasks to the user. This is a mechanical check — not a judgment call.
+
+```
+For each AC in story-N.md:
+  → Confirm it appears in exactly one row of the Phase 2 classification table
+  → Confirm at least one Track A, B, or C task directly enables or tests it
+  → If no task maps to an AC → add the missing task before presenting
+
+For each Track A task:
+  → Confirm every file it touches either exists or is being created by another Track A task
+  → If a file doesn't exist and no task creates it → add a prerequisite Track A task
+
+For each shared dependency touched by multiple Track A tasks:
+  → Confirm it has its own dedicated Track A task
+  → If not → add one before presenting
+
+For each Track C task:
+  → Confirm the tool named is listed in architecture.md Section 8 Track C tooling
+  → If not → stop and ask the human to update architecture.md first
+```
+
+Only present tasks to the user after the reverse-trace is clean. State explicitly: "Reverse-trace complete — all ACs mapped, no missing tasks found." or list what was added.
+
+---
+
+## Phase 4: TODO.md — Task Ordering
+
+One `TODO.md` covers the entire epic, sectioned by story. Track B and Track C tests are listed first within each story section — written RED by `/dev`, executed at epic CHECK. `/dev` works through stories in the order suggested by `epic-N.md` Cross-story Notes.
+
+```markdown
+# Epic #N: [Name] | Stories: #[first]–#[last]
+
+## Track B — Functional Tests (written RED per story, run at epic /check)
+
+- [ ] FT-1: [Story #1 — Functional criterion] — e2e/epic-n/story-1/criterion-1.spec.ts — 8 min
+- [ ] FT-2: [Story #1 — Edge case criterion] — e2e/epic-n/story-1/criterion-2.spec.ts — 6 min
+- [ ] FT-3: [Story #2 — Functional criterion] — e2e/epic-n/story-2/criterion-1.spec.ts — 8 min
+- [ ] FT-X: [Cross-story flow] — e2e/epic-n/cross-story/flow-1.spec.ts — 10 min
+
+## Track C — NFR Tests (written RED, run at epic /check)
+
+- [ ] TC-1: [NFR criterion] — tests/performance/epic-n-load.js — 5 min
+
+## Story #[N]: [Title]
+
+### Track A — Implementation Tasks
 
 - [ ] Task 1: [Description] — 8 min
 - [ ] Task 2: [Description] — 7 min
 
-## Integration Check
+### Story Done When
 
-- [ ] Full unit test suite passing
-- [ ] All FT tasks GREEN (UI stories only)
-- [ ] All acceptance criteria verified
+- [ ] Unit tests passing
+- [ ] Type check clean
+- [ ] Lint clean
+- [ ] Track B tests for this story written RED and committed
 
-## Story Acceptance
+## Story #[N+1]: [Title]
 
+### Track A — Implementation Tasks
+
+- [ ] Task 3: [Description] — 8 min
+
+### Story Done When
+
+- [ ] Unit tests passing
+- [ ] Type check clean
+- [ ] Lint clean
+- [ ] Track B tests for this story written RED and committed
+
+## Epic Acceptance
+
+- [ ] All stories done
 - [ ] Ready for /check
 ```
 
 ---
 
-## Phase 4: Output Files
+## Phase 5: Output Files
 
 ### task_spec_document.md
 
-> **Note:** Consumed by `/dev` for task implementation. Archived in `/check` Phase 7 (Archive Before Next Story) — not here. Do not add archive logic to `/prd`.
+One document per epic, sectioned by story. Contains all three tracks across all stories. `/dev` reads only the current story's section when implementing.
+
+> **Note:** Consumed by `/dev` for task implementation. Archived in `/check` Archive phase — not here. Do not add archive logic to `/prd`.
 
 ### story-N-ui-context.md (UI stories only)
 
-Generated by `/prd` for UI stories only. Contains only the design context relevant to this specific story, extracted from `Design.md`, `theme.json`, `UI_Patterns.md`, and the Component Behavior Guide. `/dev` loads this file instead of the full design documents, keeping context lean.
+Generated by `/prd` per story, in batch, for all UI stories in the epic. Format unchanged. `/dev` loads the context file for the current story — `story-N-ui-context.md` — not the full design documents.
 
 ```markdown
 # UI Context: Story #N — [Story Name]
@@ -188,50 +302,56 @@ Generated by /prd | Source: Design.md v[N], theme.json, UI_Patterns.md, Componen
 [Rule name]: [rule text from Design.md Section 7] — applies to: [Component name from Section 1]
 ```
 
-### story-N-uat.md (UI stories only)
+### epic-N-uat.md (UI epics only)
 
-Pre-generated by `/prd` for UI stories only, using the UAT checklist format defined in the `/uat` section. Written at story-planning time when `Design.md`, `story-N.md` acceptance criteria, and user flows are already loaded. `/uat` loads and presents this file directly — no regeneration cost at test time. If the file is missing when `/uat` runs, `/uat` regenerates it and logs a warning.
+One UAT checklist per epic, covering all UI stories and cross-story flows. Generated by `/prd` at epic planning time when all stories, flows, and components are already loaded. `/uat` loads and presents this file directly — no regeneration cost at test time.
 
 ```markdown
-# UAT Checklist: Story #N — [Story Name]
+# UAT Checklist: Epic #N — [Epic Name]
 
-Generated by /prd | Sources: story-N.md (acceptance criteria, user flows), story-N-ui-context.md (components, tokens)
+Generated by /prd | Stories: #[first]–#[last] | Sources: story-N.md files, story-N-ui-context.md files
 
 ## Setup
 
 Platform: [Web — open local dev server: http://localhost:3000 | iOS — run on simulator | Android — run on emulator]
 Test data: [e.g. use account test@example.com / password: Test1234]
-Start at: [e.g. Login screen / Home tab]
+Start at: [e.g. Login screen]
 
-## Checklist
+## Story #[N]: [Title]
 
 ### Flow 1: [Happy path from story-N.md User Flow]
 [ ] 1. [Specific action]
 [ ] 2. [What to verify]
-[ ] 3. [Next action]
 
 ### Flow 2: [Edge case / Error state]
 [ ] 1. [Action that triggers error]
 [ ] 2. [Verify error state]
 
-### Visual Check
-[ ] Colours match design tokens (from story-N-ui-context.md Section 3)
-[ ] Typography correct (font, size, weight)
+### Visual Check — Story #[N]
+[ ] Colours match design tokens
+[ ] Typography correct
 [ ] Spacing consistent
 [ ] Interactive states work
 [ ] Animations smooth
 
-### Responsive / Device Check
-[ ] [Web: 375px mobile width — layout intact]
-[ ] [Web: 1280px desktop — layout intact]
-[ ] [Mobile: small device — no content cut off]
+## Story #[N+1]: [Title]
+[repeat structure per story]
 
-### Edge Cases
-[ ] [Story-specific edge case from story-N.md acceptance criteria]
+## Cross-story Flows
+
+### Flow: [e.g. Sign up → verify email → first login]
+[ ] 1. [Action in story #N]
+[ ] 2. [Transition to story #N+1 behaviour]
+[ ] 3. [Final assertion]
+
+## Responsive / Device Check (epic-wide)
+[ ] [Web: 375px mobile width — all epic screens intact]
+[ ] [Web: 1280px desktop — all epic screens intact]
+[ ] [Mobile: small device — no content cut off across any screen]
 
 ## Sign-off
 
-Reply with: ✅ APPROVED — all items checked, ready to merge | ❌ CHANGES NEEDED — [describe what needs fixing]
+Reply with: ✅ APPROVED — all items checked, ready to merge | ❌ CHANGES NEEDED — [story #N: describe what needs fixing]
 ```
 
 ---
@@ -239,22 +359,26 @@ Reply with: ✅ APPROVED — all items checked, ready to merge | ❌ CHANGES NEE
 ## Claude Instructions for /prd
 
 0. **Branch check — must be the very first action, before reading any other file:**
-   - **Step 0a:** Run `git branch --show-current` AND read `Sprint.md` in parallel — these two reads are safe to parallelise and give you the current branch name plus the active story number and title.
-   - **Step 0b:** Derive the expected branch name from the active story:
-     - Pass 1 (web): `feature/story-N-{slug}-web` (e.g. `feature/story-3-child-profile-web`)
-     - Pass 2 (native): `feature/story-N-{slug}-native`
-     - Slug = story title lowercased, spaces → hyphens, special chars stripped (e.g. "Child Profile Setup" → `child-profile-setup`)
-   - **Step 0c:** If already on the correct branch → proceed. If on any other branch (e.g. a previous story's branch or `main`): run `git checkout main && git pull && git checkout -b feature/story-N-{slug}-{pass}` and tell the user: "Switched to feature/story-N-{slug}-{pass} off main."
+   - **Step 0a:** Run `git branch --show-current` AND read `Sprint.md` in parallel.
+   - **Step 0b:** Derive the expected branch name from the active epic:
+     - `feature/epic-N-{slug}` (e.g. `feature/epic-1-account-creation`)
+     - Slug = epic title lowercased, spaces → hyphens, special chars stripped
+   - **Step 0c:** If already on the correct branch → proceed. If on any other branch: run `git checkout main && git pull && git checkout -b feature/epic-N-{slug}` and tell the user: "Switched to feature/epic-N-{slug} off main."
    - Never create the branch silently — always report the branch name to the user.
-   - **Only after the branch is confirmed/created**, proceed to read story-N.md, architecture.md, and design files.
+   - **Only after the branch is confirmed/created**, proceed to read epic and story files.
 
-1. Read `story-N.md` — active story file, acceptance criteria, user flows, story type (UI / Backend), and Design References section. (`Sprint.md` was already read in step 0a — no need to re-read.)
-2. Read `architecture.md` (patterns, naming conventions, tech stack). For UI stories, the blueprint Zones tables for this story's screens are already embedded in `story-N.md` Design References — use these as the authoritative screen-level specification. Do not re-read the full `blueprint-[platform].md` file. Extract the component names, states, and token references from the embedded Zones tables and use them as the filter for reading `ui-patterns-[platform].md`, `component-behavior-guide.md`, and `theme.json` — load only entries referenced in the embedded blueprint content. Do not pass these files to `/dev` directly — use them only to generate `story-N-ui-context.md`.
+1. Read `epic-N.md` — story list, AC summaries, cross-story notes, suggested story order. This is the planning context for the whole epic. (`Sprint.md` was already read in step 0a — no need to re-read.)
+2. Read `architecture.md` (patterns, naming conventions, tech stack, Section 8 Critical Paths + Track C tooling).
 3. Detect tech stack from config files. Ask user if uncertain.
 4. Verify `.github/workflows/ci.yml` exists. If missing: stop and tell the user "CI file not found — return to Sprint 0 to set it up before running /prd." If present: proceed — no changes needed.
 5. Show pre-flight summary and wait for confirmation.
-6. Generate Track B first (UI stories only) — for each acceptance criterion in `story-N.md`, apply the resolution logic in the Track B section above before writing the FT. Resolve all untestable criteria with the human before proceeding to task generation. No gaps may be deferred past this step.
-7. Generate Track A — atomic implementation tasks, 5–10 min each.
-8. Write `task_spec_document.md` with both tracks. For UI stories, also generate `story-N-ui-context.md` — using the component, flow, and screen filter list extracted in step 2, pull only the matching entries from `Design.md §4`, `UI_Patterns.md`, the Component Behavior Guide, and `theme.json`. Omit everything not referenced by this story. This is the only design file `/dev` will load. For UI stories, also generate `story-N-uat.md` — the pre-built UAT checklist for this story using the format defined in `/uat`. `/uat` will load and present this file directly rather than regenerating it.
-9. Write `TODO.md` — FT tasks first, then implementation tasks.
-10. Tell user: "Tasks ready. Run /dev to start FT-1." (UI) or "Run /dev to start Task 1." (Backend).
+6. **Run the AC Classification Pass (Phase 2)** — read each `story-N.md` in the epic's suggested order. For every AC across all stories, classify into Functional / Edge case / NFR-automatable / NFR-E2E-testable / UAT-only. Also identify cross-story Track B flows. Present the full classification table grouped by story to the human and wait for confirmation. Resolve all UAT-only declarations now.
+7. Generate Track B — one FT per functional criterion and edge case AC across all stories, plus cross-story flows. Apply the resolution logic in the Track B section. Edge cases get their own FT — never bundled.
+8. Generate Track C — one TC per NFR AC classified as automatable or E2E-testable. Tool must come from architecture.md Section 8.
+9. Generate Track A — story by story, reading each `story-N.md` individually. For UI stories, the blueprint Zones tables are embedded in `story-N.md` Design References — use these as the authoritative screen-level specification. Extract component names, states, and token references from the embedded Zones tables as the filter for reading `ui-patterns-[platform].md`, `component-behavior-guide.md`, and `theme.json`.
+10. **Run the Completeness Reverse-Trace (Phase 3)** — verify every AC maps to at least one task, every file exists or is being created, every shared dependency has its own task, every Track C tool is in architecture.md. Add any missing tasks. State result explicitly.
+11. Write `task_spec_document.md` — one document for the epic, sectioned by story, containing all three tracks.
+12. For each UI story, generate `story-N-ui-context.md` — pull only matching entries from `Design.md §4`, `UI_Patterns.md`, Component Behavior Guide, and `theme.json`. This is the only design file `/dev` loads for that story.
+13. For UI epics, generate `epic-N-uat.md` — the UAT checklist covering all stories and cross-story flows.
+14. Write `TODO.md` — one document for the epic, sectioned by story, Track B and Track C listed at top, Track A tasks per story section.
+15. Tell user: "Tasks ready for Epic #N ([N] stories, [M] Track B tests, [P] Track C tests). Run /dev to start Story #[first]."

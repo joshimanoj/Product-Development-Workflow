@@ -2,7 +2,9 @@
 
 ## Purpose
 
-Read the approved `product_note.md`, `architecture.md`, and `Design.md` and produce `Sprint.md` (the roadmap and meta record) plus an individual `story-N.md` file for each user story. `/sprint` does not extract or infer features — it reads them directly from the Features section of `product_note.md`.
+Read the approved `product_note.md`, `architecture.md`, and `Design.md` and produce `Sprint.md` (the roadmap and meta record) plus one `epic-N.md` (lightweight planning document) and individual `story-N.md` files for each story within each epic. `/sprint` does not extract or infer features — it reads them directly from the Features section of `product_note.md`.
+
+Stories are the atomic unit of user behaviour — one thing a user can attempt independently and either succeed or fail. Epics group related stories under a shared user goal. Features from `product_note.md` map to one or more epics.
 
 ---
 
@@ -27,10 +29,24 @@ Before planning begins, Claude reads `architecture.md` Section 8 (Testing Strate
 
 ## Phase 1: Read & Map
 
+### Story Granularity Rule
+
+A story is one thing a user can attempt independently and either succeed or fail. If two behaviours can be attempted separately, they are two stories.
+
+Test: if the acceptance criteria require the word "and" to connect two distinct user goals, it should be two stories.
+
+Examples:
+- "User can create an account" → epic
+- "User can sign up with email and password" → story ✅
+- "User can sign up with Google" → story ✅
+- "User can reset their password" → story ✅
+
+Epics group related stories under a shared user goal. A feature from `product_note.md` maps to one or more epics. An epic maps to two or more stories.
+
 ### A. Read product_note.md
 
-- Section 4 (Features) → source for all user stories. Each feature becomes one or more stories.
-- Section 1 (Vision) + Section 2 (Target Users) → context for writing story descriptions.
+- Section 4 (Features) → source for all epics and stories. Each feature maps to one or more epics. Each epic maps to two or more stories.
+- Section 1 (Vision) + Section 2 (Target Users) → context for writing epic and story descriptions.
 - Section 5 (Out of Scope) → rejection list. Do not create stories for anything listed here.
 - Section 6 (Constraints) → sprint duration, platform targets, compliance requirements.
 - Section 7 (Success Metrics) → Definition of Done criteria at the product level.
@@ -78,16 +94,38 @@ Blocker: Must complete before Sprint 1
 
 ---
 
-## Phase 2: Build User Stories
+## Phase 2: Build Epics and Stories
 
-For each feature in `product_note.md` Section 4, generate stories using this template. Claude elaborates the detail — the feature entry in `product_note.md` is the seed, not the full spec.
+Two passes. Pass 1 identifies epics from features. Pass 2 decomposes each epic into granular stories.
+
+### Pass 1 — Epic Decomposition
+
+For each feature in `product_note.md` Section 4, identify the epics it contains. An epic represents a coherent user goal that requires multiple distinct user actions to fulfil.
+
+Present the epic list to the user before proceeding to Pass 2:
+
+```
+Feature: User Authentication
+  Epic 1: Account Creation
+  Epic 2: Account Access
+  Epic 3: Account Recovery
+Confirm epic breakdown before story decomposition?
+```
+
+Human must confirm before proceeding to Pass 2.
+
+### Pass 2 — Story Decomposition
+
+For each epic, enumerate every distinct user-facing behaviour as its own story. Apply the granularity rule: one thing a user can attempt independently.
+
+For each story, generate a `story-N.md` using the existing template below. Stories are numbered globally across all epics: Epic 1 stories are #1-#6, Epic 2 stories are #7-#11 etc.
 
 ```markdown
 ### Story #N: [Title]
 
 As a [user from product_note.md Section 2]
-I want [action derived from feature description]
-So that [value from feature's 'User value' field]
+I want [single, specific action]
+So that [concrete outcome]
 
 #### Context
 
@@ -113,11 +151,7 @@ Edge Cases:     [ ] [Scenario handling]
 
 #### Design References
 
-Blueprint Screens: [SCREEN N: Name, SCREEN N: Name — every screen this story touches]
-
-<!-- /sprint embeds the verbatim blueprint Zones table for each screen listed above.
-     Copy the full Zones table from blueprint-[platform].md for each screen.
-     Do not summarise or paraphrase — paste verbatim. -->
+Blueprint Screens: [SCREEN N: Name — every screen this story touches]
 
 [Verbatim Zones table from blueprint-[platform].md — SCREEN N]
 
@@ -127,13 +161,13 @@ Blueprint Screens: [SCREEN N: Name, SCREEN N: Name — every screen this story t
 
 [Repeat for each screen this story touches]
 
-Key UI Elements: [component → expected behaviour — derived from blueprint Zones above]
+Key UI Elements: [component → expected behaviour]
 Platform Notes: [verbatim Platform Notes from blueprint for each screen]
 
 #### Technical Notes
 
 Files Affected: [list]
-Dependencies: [Story #N must be complete / third-party]
+Dependencies: [Story #N must complete first / none]
 API Contracts: [if applicable]
 Data Model: [if applicable]
 
@@ -151,22 +185,53 @@ Risk Factors: [list]
 #### Definition of Done
 
 [ ] All acceptance criteria met
-[ ] Unit + integration tests passing
-[ ] Functional/E2E tests passing
-[ ] UAT passed (UI stories only)
+[ ] Unit tests passing
+[ ] Track B functional tests written RED (run at epic /check)
+[ ] UAT passed (UI stories only — at epic level)
 [ ] Code reviewed + merged
+```
+
+After generating all `story-N.md` files for an epic, generate the `epic-N.md` planning document:
+
+```markdown
+# Epic N: [Name]
+
+Feature: [parent feature from product_note.md]
+Goal: [what the user can fully do when this epic is complete]
+Stories: [N total] | Story range: #[first] — #[last]
+Type: UI | Backend | Mixed
+
+## Stories
+
+### Story #N: [Title]
+One line: [what the user does]
+ACs summary:
+- Functional: [one line per criterion]
+- Edge cases: [one line per criterion]
+- NFRs: [one line per criterion]
+Depends on: [Story #X must complete first | none]
+
+### Story #N+1: [Title]
+[repeat structure]
+
+## Cross-story Notes
+
+Shared infrastructure: [e.g. auth token service needed by stories 1, 3, 4 — build in story 1]
+Ordering constraints: [e.g. story 2 cannot start until story 1's API contract is confirmed]
+Shared components: [e.g. FormField component used by stories 1, 2, 3 — build once in story 1]
+Suggested story order: [N → N+2 → N+1 → N+3 — with reason]
 ```
 
 ---
 
 ## Phase 3: Sprint Planning
 
-### Story Grouping
+### Epic and Story Grouping
 
-- Dependencies — what must come first?
-- Priority — Must Have features before Should Have.
-- Technical Risk — validate uncertain areas early.
-- Logical Flow — group stories that share components or data.
+- Dependencies — which epics must come first? Which stories within an epic must be ordered?
+- Priority — Must Have epics before Should Have epics.
+- Technical Risk — validate uncertain epics early.
+- Logical Flow — group epics that share components or data models.
 
 ### Sprint Structure
 
@@ -177,12 +242,12 @@ Duration: [N weeks]
 Goal: [User value delivered]
 Success Metric: [How we know it worked]
 
-Stories:
-Story #X — [Title] Complexity: [1-5] Type: UI | Backend Priority: High|Med|Low
+Epics:
+Epic #X — [Title] Stories: #N-#M Type: UI | Backend | Mixed Priority: High|Med|Low
 
 Capacity: [Total story points]
 Risks: [Technical / Resource / Scope risks + mitigations]
-DoD: [ ] All stories verified [ ] Demo prepared [ ] Deployed to staging
+DoD: [ ] All epics verified [ ] Demo prepared [ ] Deployed to staging
 ```
 
 ---
@@ -195,38 +260,51 @@ DoD: [ ] All stories verified [ ] Demo prepared [ ] Deployed to staging
 Sprint 1 → Sprint 2 → Sprint 3
 
 Blocking Dependencies:
-Story #5 (auth) MUST complete before Story #12 (user profiles)
+Epic #2 (account access) MUST complete before Epic #5 (user profiles)
+Story #3 (auth token service) MUST complete before Story #4 within Epic #1
 
 De-risking:
-Build Story #5 first in Sprint 1
+Build Epic #1 first in Sprint 1
 Run payment spike before Sprint 2 starts
 ```
 
 ---
 
-## Output — Sprint.md + story-N.md files + architecture-dev-summary.md
+## Output — Sprint.md + epic-N.md files + story-N.md files + architecture-dev-summary.md
 
-`Sprint.md` is the roadmap and meta record for the life of the project. It is never deleted or cleared — only updated as stories complete. It contains the sprint breakdown, critical path, and a status index of all stories. It does NOT contain individual story detail. Each story is written to its own `story-N.md` file (e.g. `story-1.md`, `story-2.md`). `/prd` loads only the active `story-N.md` file, keeping context lean regardless of sprint count.
+`Sprint.md` is the roadmap and meta record for the life of the project. It is never deleted or cleared — only updated as epics complete. It contains the sprint breakdown, critical path, and a three-level status index: features → epics → stories. It does NOT contain individual epic or story detail.
 
-`/sprint` also generates `architecture-dev-summary.md` — a focused subset of `architecture.md` containing only what `/dev` needs: stack, naming conventions, file structure, and test runner commands. `/dev` loads this summary instead of the full `architecture.md`.
+Each epic is written to its own `epic-N.md` file (lightweight planning document). Each story is written to its own `story-N.md` file (full detail). `/prd` reads `epic-N.md` first for planning context, then reads each `story-N.md` individually for task generation.
+
+`/sprint` also generates `architecture-dev-summary.md` — unchanged from current behaviour.
 
 ### Sprint.md Format
 
 ```markdown
 # Sprint Plan: [Project Name]
 
-Generated: [Date] | Total Stories: [N] | Duration: [X weeks]
+Generated: [Date] | Total Epics: [N] | Total Stories: [M] | Duration: [X weeks]
 
 Contents:
 1. Technical Prerequisites (Sprint 0)
-2. Story Index (title, type, status, complexity — links to story-N.md)
+2. Epic & Story Index (three-level hierarchy — links to epic-N.md and story-N.md)
 3. Sprint Breakdown
 4. Critical Path
 5. Roadmap
 
-Note: Full story detail lives in story-N.md files (e.g. story-1.md).
+## Epic & Story Index
 
-Active Sprint: 1 | Next Story: #1 | Ready for: /prd
+### Epic #1: [Name] | Feature: [parent feature] | Stories: #1-#6 | Status: Not started
+- Story #1: [Title] | Type: UI | Backend | Status: Not started
+- Story #2: [Title] | Type: UI | Backend | Status: Not started
+...
+
+### Epic #2: [Name] | Feature: [parent feature] | Stories: #7-#11 | Status: Not started
+...
+
+Note: Epic detail lives in epic-N.md. Story detail lives in story-N.md.
+
+Active Sprint: 1 | Next Epic: #1 | Ready for: /prd
 ```
 
 ### architecture-dev-summary.md — Prescribed Format
@@ -274,9 +352,12 @@ Lint: [command] | Type check: [command]
 4. Read `architecture.md` Sections 1, 3, 4, 5, 7, 8 for technical context.
 5. Read `Design.md` Sections 3, 4, 7 for UX and interaction context.
 6. Identify Sprint 0 prerequisites.
-7. Generate user stories — one per feature entry (or split if complex). Use the template above.
-8. Mark Story Type (UI / Backend) for each story — this determines whether `/uat` runs.
-9. Group into sprints by dependency, priority, and risk.
-10. Identify critical path.
-11. Write `Sprint.md` (roadmap/meta: story index, sprint breakdown, critical path, roadmap). Write a separate `story-N.md` file for each user story containing the full story detail from the template above. For every UI story, identify which blueprint screens it touches and paste the verbatim Zones table from `blueprint-[platform].md` for each of those screens directly into the story's Design References section. Do not summarise — copy the table exactly as it appears in the blueprint. This embedded content is what `/prd` uses to generate tasks — it does not re-read the blueprint file separately. Generate `architecture-dev-summary.md` from `architecture.md` — extract only: Section 1 (Platform & Technical Stack), the naming conventions and file structure from Section 5 (Architecture Patterns), and test runner commands from Section 8 (Testing Strategy). This file is used by `/dev` in place of the full `architecture.md`. Present to user for approval.
-12. Ask: "Sprint plan ready with [N] stories across [M] sprints. Ready to run /prd on Story #1?"
+7. **Pass 1 — Epic decomposition:** For each feature, identify the epics it contains. Present the epic list to the human and wait for confirmation before proceeding to story decomposition.
+8. **Pass 2 — Story decomposition:** For each confirmed epic, apply the granularity rule to enumerate every distinct user-facing behaviour as its own story. A story is one thing a user can attempt independently. Stories are numbered globally across all epics.
+9. For each story, generate a `story-N.md` using the template above. For every UI story, identify which blueprint screens it touches and paste the verbatim Zones table from `blueprint-[platform].md` for each of those screens directly into the story's Design References section.
+10. For each epic, generate an `epic-N.md` using the template above — after all its `story-N.md` files are written, so cross-story notes can be populated accurately.
+11. Mark Story Type (UI / Backend) for each story.
+12. Group epics into sprints by dependency, priority, and risk.
+13. Identify critical path at epic level and story level within epics.
+14. Write `Sprint.md` with three-level index (features → epics → stories), sprint breakdown, and critical path. Generate `architecture-dev-summary.md` from `architecture.md` — unchanged from current behaviour.
+15. Ask: "Sprint plan ready with [N] epics, [M] stories across [P] sprints. Ready to run /prd on Epic #1?"

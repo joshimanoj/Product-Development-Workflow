@@ -163,6 +163,16 @@ Location: [e.g. tests/fixtures/ | tests/factories/ | test/support/]
 Isolation: [e.g. each test resets DB state via transaction rollback / truncation]
 External services: [real / mocked / stubbed — state your policy]
 
+Critical paths (required — run on every /check regardless of story type):
+- [Path name]: [specific test file — e.g. tests/auth/login.test.ts]
+- [Path name]: [specific test file — e.g. tests/core/[feature].test.ts]
+
+Track C tooling (required — assigned per NFR type; used by /prd to classify NFR acceptance criteria):
+- Performance: [tool — e.g. k6, Lighthouse CI | test file location | pass threshold]
+- Accessibility: [tool — e.g. axe-core, pa11y | test file location | pass threshold]
+- Security: [tool — e.g. OWASP ZAP, custom sanitisation tests | test file location | pass condition]
+- Other NFR types: [tool | test file location | pass condition]
+
 ## 9. Open Architectural Decisions
 
 Unresolved decisions that may affect implementation.
@@ -177,6 +187,6 @@ Unresolved decisions that may affect implementation.
 1. Read `product_note.md` and `Design.md` fully before asking any questions. Identify constraint-driven decisions first: platform from `product_note.md` Section 6, integrations from Section 4, compliance from Section 6. Use `Design.md` to understand UX and interaction requirements that should shape technical decisions (e.g. navigation patterns, offline needs, animation complexity).
 2. Propose a recommended stack with explicit rationale and trade-offs — do not just ask "what do you want?".
 3. Work through each section collaboratively. Confirm decisions before moving on.
-4. Pay special attention to Section 8 (Testing Strategy) — confirm emulator targets here. These are locked in and used by `/sprint`, `/prd`, and CI config from this point forward. They are not asked again.
+4. Pay special attention to Section 8 (Testing Strategy) — confirm emulator targets, Critical Paths, and Track C tooling here. These are locked in and used by `/sprint`, `/prd`, and CI config from this point forward. They are not asked again. Critical Paths must name specific test files — not just feature areas. Track C tooling must name a specific tool, test file location, and pass threshold per NFR type — not just "performance testing".
 5. Challenge thin entries: "You've listed PostgreSQL but haven't defined your data models or indexing strategy — let's work through that now."
 6. Only mark Status: Approved when the human explicitly confirms every section.
