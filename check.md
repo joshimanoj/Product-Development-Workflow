@@ -81,11 +81,26 @@ flutter drive --target=test_driver/app.dart     # Flutter
 
 Run all Track C NFR tests written during `/prd`. All must be GREEN before proceeding. Commands and pass conditions come from the TC tasks in `task_spec_document.md`. This is the first time these tests execute — deferred from `/dev`.
 
+Before running each TC task, verify the tool is available. Apply this resolution logic:
+
+| Situation | Action |
+|-----------|--------|
+| Tool missing, installable via brew or npm | Install silently, then re-run. Examples: `brew install k6`, `npm install -g lhci` |
+| Tool missing, cannot auto-install (needs licence, manual setup, or unknown source) | Stop. Tell user: "TC-N requires [tool] — install it manually and re-run /check from Phase 2b." Do not skip the test. |
+| Tool installed but requires a running dev server | Start the dev server first (`npm run dev` or equivalent), run the test, then stop the server. |
+| Tool requires env vars or API keys that are not set | Stop. Tell user exactly which vars are missing and where to set them. Do not run the test without them. |
+
 ```bash
-# Run each TC task's run command from task_spec_document.md
+# For each TC task in task_spec_document.md:
+# 1. Check tool availability
+which [tool] || command -v [tool]   # system tools (k6, lighthouse)
+# npx-based tools (lhci, axe) self-install — no pre-check needed
+
+# 2. Run the declared command
 [TC-1 run command]   # e.g. k6 run tests/performance/epic-n-load.js
-[TC-2 run command]   # e.g. npx axe-core tests/accessibility/epic-n.html
-# Confirm each meets its declared pass condition (threshold from task_spec_document.md)
+[TC-2 run command]   # e.g. npx lhci autorun
+
+# 3. Confirm result meets declared pass condition from task_spec_document.md
 ```
 
 ---
