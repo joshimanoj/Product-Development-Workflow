@@ -7,6 +7,11 @@ on: [push]
 # Every job is gated by hashFiles() on its stack's config file — the correct
 # jobs activate automatically. No per-story changes are needed.
 #
+# Branch strategy:
+#   Feature branches — full suite: Track A (unit) + Track B (E2E) + Track C (NFR)
+#   main branch      — Track A only (unit tests): drift safety net post-merge.
+#                      Track B + Track C already passed on feature branch + UAT approved.
+#
 # Mobile jobs (mobile-ios, mobile-android) are gated by the emulator targets
 # confirmed in architecture.md Section 8. Set the env vars below at Sprint 0
 # to match those confirmed targets. If a target is not confirmed, set to false.
@@ -19,9 +24,11 @@ env:
 jobs:
 
   # -------------------------------------------------------------------------
-  # Node — Jest or Vitest + Playwright
-  # Activates when: package.json is present
+  # TRACK A — Unit Tests (all branches including main)
   # -------------------------------------------------------------------------
+
+  # Node — type check + Jest/Vitest unit tests only
+  # Activates when: package.json is present
   test-node:
     if: hashFiles('package.json') != ''
     runs-on: ubuntu-latest
@@ -39,14 +46,9 @@ jobs:
       - name: Unit tests (Vitest)
         if: hashFiles('vitest.config.*') != ''
         run: npx vitest run
-      - name: Web E2E tests (Playwright)
-        if: hashFiles('playwright.config.*') != ''
-        run: npx playwright install --with-deps && npx playwright test
 
-  # -------------------------------------------------------------------------
-  # Python — pytest + flake8 + mypy
-  # Activates when: pytest.ini or requirements.txt is present
-  # -------------------------------------------------------------------------
+  # Python — flake8 + mypy + pytest
+  # Activates when: pytest.ini or requirements.txt or pyproject.toml is present
   test-python:
     if: hashFiles('pytest.ini') != '' || hashFiles('requirements.txt') != '' || hashFiles('pyproject.toml') != ''
     runs-on: ubuntu-latest
@@ -64,10 +66,8 @@ jobs:
       - run: mypy .
       - run: pytest
 
-  # -------------------------------------------------------------------------
   # Go
   # Activates when: go.mod is present
-  # -------------------------------------------------------------------------
   test-go:
     if: hashFiles('go.mod') != ''
     runs-on: ubuntu-latest
@@ -80,10 +80,8 @@ jobs:
       - run: go build ./...
       - run: go test ./...
 
-  # -------------------------------------------------------------------------
   # Rust
   # Activates when: Cargo.toml is present
-  # -------------------------------------------------------------------------
   test-rust:
     if: hashFiles('Cargo.toml') != ''
     runs-on: ubuntu-latest
@@ -94,10 +92,8 @@ jobs:
       - run: cargo check
       - run: cargo test
 
-  # -------------------------------------------------------------------------
   # Flutter / Dart
   # Activates when: pubspec.yaml is present
-  # -------------------------------------------------------------------------
   test-flutter:
     if: hashFiles('pubspec.yaml') != ''
     runs-on: ubuntu-latest
@@ -110,10 +106,8 @@ jobs:
       - run: dart analyze
       - run: flutter test
 
-  # -------------------------------------------------------------------------
   # Kotlin / Android (Gradle)
   # Activates when: build.gradle or build.gradle.kts is present
-  # -------------------------------------------------------------------------
   test-kotlin:
     if: hashFiles('build.gradle') != '' || hashFiles('build.gradle.kts') != ''
     runs-on: ubuntu-latest
@@ -127,10 +121,8 @@ jobs:
       - run: ./gradlew detekt
       - run: ./gradlew test
 
-  # -------------------------------------------------------------------------
-  # iOS / Swift (Xcode)
+  # iOS / Swift (Xcode) — unit tests only
   # Activates when: an .xcodeproj or .xcworkspace directory is present
-  # -------------------------------------------------------------------------
   test-ios:
     if: hashFiles('*.xcodeproj') != '' || hashFiles('*.xcworkspace') != ''
     runs-on: macos-latest
@@ -144,11 +136,30 @@ jobs:
             | xcpretty
 
   # -------------------------------------------------------------------------
-  # Mobile E2E — iOS Simulator (Detox)
-  # Activates when: IOS_ENABLED env var = true (set at Sprint 0 from architecture.md)
+  # TRACK B — Functional / E2E Tests (feature branches only, skip main)
   # -------------------------------------------------------------------------
+
+  # Web E2E — Playwright
+  # Activates when: playwright.config.* present AND not main branch
+  track-b-web:
+    if: hashFiles('playwright.config.*') != '' && github.ref != 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - run: npm ci
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps
+      - name: Run Playwright tests
+        run: npx playwright test
+
+  # Mobile E2E — iOS Simulator (Detox)
+  # Activates when: IOS_ENABLED = true AND not main branch
   mobile-ios:
-    if: env.IOS_ENABLED == 'true'
+    if: env.IOS_ENABLED == 'true' && github.ref != 'refs/heads/main'
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
@@ -164,12 +175,10 @@ jobs:
       - name: Run Detox tests
         run: detox test --configuration ios.sim.release --cleanup
 
-  # -------------------------------------------------------------------------
   # Mobile E2E — Android Emulator (Detox)
-  # Activates when: ANDROID_ENABLED env var = true (set at Sprint 0 from architecture.md)
-  # -------------------------------------------------------------------------
+  # Activates when: ANDROID_ENABLED = true AND not main branch
   mobile-android:
-    if: env.ANDROID_ENABLED == 'true'
+    if: env.ANDROID_ENABLED == 'true' && github.ref != 'refs/heads/main'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -193,3 +202,60 @@ jobs:
         run: detox build --configuration android.emu.release
       - name: Run Detox tests
         run: detox test --configuration android.emu.release --cleanup
+
+  # -------------------------------------------------------------------------
+  # TRACK C — NFR Tests (feature branches only, skip main)
+  # Tools and thresholds are defined in architecture.md Section 8.
+  # Each job activates via hashFiles detection of its config/test directory.
+  # -------------------------------------------------------------------------
+
+  # Performance — k6
+  # Activates when: tests/performance/ directory contains files AND not main branch
+  track-c-performance:
+    if: hashFiles('tests/performance/**') != '' && github.ref != 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install k6
+        run: |
+          sudo gpg --no-default-keyring --keyring /usr/share/keyrings/k6-archive-keyring.gpg \
+            --keyserver hkp://keyserver.ubuntu.com:80 \
+            --recv-keys C5AD17C747E3415A3642D57D77C6C491D6AC1D69
+          echo "deb [signed-by=/usr/share/keyrings/k6-archive-keyring.gpg] https://dl.k6.io/deb stable main" \
+            | sudo tee /etc/apt/sources.list.d/k6.list
+          sudo apt-get update && sudo apt-get install k6
+      - name: Run k6 performance tests
+        run: |
+          for f in tests/performance/*.js; do k6 run "$f"; done
+
+  # Accessibility — Lighthouse CI
+  # Activates when: .lighthouserc* or lighthouserc* config present AND not main branch
+  track-c-lighthouse:
+    if: (hashFiles('.lighthouserc*') != '' || hashFiles('lighthouserc*') != '') && github.ref != 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - run: npm ci
+      - name: Run Lighthouse CI
+        run: npx lhci autorun
+
+  # Accessibility — axe-core
+  # Activates when: tests/accessibility/ directory contains files AND not main branch
+  track-c-axe:
+    if: hashFiles('tests/accessibility/**') != '' && github.ref != 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - run: npm ci
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps
+      - name: Run axe accessibility tests
+        run: npx playwright test tests/accessibility/

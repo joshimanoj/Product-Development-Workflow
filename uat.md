@@ -61,7 +61,13 @@ The human reviews each item on the checklist manually on the real device or brow
    git checkout main && git pull
    ```
 
-3. **Append a checkpoint to `HANDOVER.md`** — written at merge time:
+3. **Wait for main branch CI — Track A only (unit tests):**
+   ```bash
+   gh run watch $(gh run list --branch main --limit 1 --json databaseId -q '.[0].databaseId') --repo [owner/repo]
+   ```
+   This is a drift safety net — confirms the squash merge didn't break main. Track B and Track C do not run on main (feature branch CI + UAT already covered them). If main CI is red: **stop, do not write HANDOVER**. Main is broken — fix immediately as a P0 hotfix before closing out the epic. Do not re-run UAT.
+
+4. **Append a checkpoint to `HANDOVER.md`** — written at merge time:
    ```markdown
    ---
 
@@ -75,26 +81,26 @@ The human reviews each item on the checklist manually on the real device or brow
    Next: Epic #[N+1] [name] | Ready for: /prd
    ```
 
-4. **Update `Sprint.md`:**
+5. **Update `Sprint.md`:**
    - Mark epic `✅` in Epic & Story Index — all stories within it
    - Update Active Pointers to point to Epic #N+1
 
-5. **Clear `TODO.md`:**
+6. **Clear `TODO.md`:**
    ```
    # TODO
    _Ready for Epic #N+1: [name] — run /prd to generate task list._
    ```
 
-6. **Commit and push to main:**
+7. **Commit and push to main:**
    ```bash
    git add HANDOVER.md Sprint.md TODO.md
    git commit -m "chore(epic-N): UAT approved — mark complete, clear TODO for epic #N+1"
    git push origin main
    ```
 
-7. **If this epic had UAT rejections**, update those entries in `uat-log.md`: fill in Fix Applied and set Status to Resolved.
+8. **If this epic had UAT rejections**, update those entries in `uat-log.md`: fill in Fix Applied and set Status to Resolved.
 
-8. **Tell the user:** "Epic #N complete and merged ✅. Ready to run /prd on Epic #[N+1]?"
+9. **Tell the user:** "Epic #N complete and merged ✅. Ready to run /prd on Epic #[N+1]?"
 
 ---
 

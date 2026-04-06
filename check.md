@@ -296,11 +296,13 @@ echo "# Ready for next epic" > TODO.md
 | PostToolUse hook | Every file save in Claude | Formatting + linting errors instantly |
 | Pre-commit hook | Every git commit | Failing unit tests for staged files |
 | npm run verify-app | On demand | Smoke test against running dev server |
-| CI — unit + integration | Every push | All unit + integration tests |
-| CI — web-playwright | Every push | All functional/E2E tests (web) |
-| CI — mobile-e2e | Every push (mobile) | Full mobile E2E suite |
+| CI — Track A (unit) | Every push (all branches incl. main) | All unit + integration tests |
+| CI — Track B (web-playwright) | Feature branch push only | All functional/E2E tests (web) |
+| CI — Track B (mobile-e2e) | Feature branch push only (mobile) | Full mobile E2E suite |
+| CI — Track C (k6 / Lighthouse / axe) | Feature branch push only | Performance, accessibility, NFR thresholds |
 | /check | After all stories in epic done | Unit tests + Track B + Track C + cross-story flows + regression |
 | /uat | UI epics before merge | Human: look, feel, interaction sign-off across all stories |
+| Post-merge CI (main) | After UAT squash merge | Track A only — confirms merge didn't break main |
 | Mac notification | When Claude stops | Never miss a prompt while stepping away |
 
 ---
