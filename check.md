@@ -153,7 +153,7 @@ Cross-story flows:
 ```
 
 **Failure rules — apply per row:**
-- FT or TC is RED → test failure, handle in Phase 5b under "Test failure."
+- FT or TC is RED → test failure, handle in Phase 5b under "Track B functional test failure" or "Track C NFR test failure."
 - AC has no mapped test and was not declared UAT-only at `/prd` time → `/prd` process failure — log to `HANDOVER.md` as process debt and proceed. Do not write new tests here.
 - NFR AC has no TC and was not declared UAT-only or E2E-testable at `/prd` time → `/prd` process failure — log to `HANDOVER.md` as process debt and proceed.
 
@@ -228,14 +228,29 @@ Ready for: /uat (UI epic) | Merge (Backend epic)
 
 Only reached if Phase 5 Local Summary has one or more ❌ items. Do not proceed to Phase 6 until all items below are resolved and `/check` re-runs clean from Phase 1.
 
+### Fix Task Schema
+
+When any of the three test-failure rows below fires, `/check` writes a new task into `TODO.md` — not a vague "add a fix task" note, but an object with these fields:
+
+| Field | Meaning |
+|-------|---------|
+| `target_test` | The failing test's id (e.g. unit test name, `FT-7`, `TC-2`) |
+| `suspect_task_id` | The Track A task most likely responsible — found via file/flow overlap with `task_spec_document.md` (reuse the same dependent-tracing logic as Phase 4 Step 2) |
+| `raw_failure_output` | The actual assertion diff / stack trace, verbatim — not paraphrased |
+| `allowed_files` | Implementation/config files this fix may touch. Never includes the test file itself, its assertions, or (for Track C) its declared threshold |
+| `skip_red` | `true` for Track B/C failures (the test already exists and is already failing for the first time) — `false` or omitted for unit test regressions (a new reproduction test must be written) |
+
+Insert the task at the **top of the current story's section** in `TODO.md`, ahead of any unstarted Track A work, so `/dev`'s Step 0 "first unchecked task" logic picks it up first.
+
 | Failure Type | Action |
 |-------------|--------|
-| Test failure (unit / integration / Track B functional) | Return to `/dev` — add a fix task to `TODO.md`, write a failing test that reproduces the bug, fix Red-Green-Refactor, commit, then re-run `/check` from Phase 1. |
-| Track C NFR test failure | Return to `/dev` — add a fix task to `TODO.md`, fix the implementation or configuration until the TC passes its declared threshold, commit, then re-run `/check` from Phase 1. Do not change the pass threshold to make the test pass — that defeats the gate. |
+| Unit test regression (Phase 1A) | Trace the broken test to its owning Track A task via `task_spec_document.md` file paths → `suspect_task_id`. Write a fix task with `skip_red: false`. Return to `/dev` — it writes a new reproduction test (Step 1 RED), then Red-Green-Refactor as normal. Commit, then re-run `/check` from Phase 1. |
+| Track B functional test failure — first execution (Phase 2a / 2c) | Trace suspect Track A task(s) via file/flow overlap with the FT's User Flow steps → `suspect_task_id`. Write a fix task with `skip_red: true`, `target_test` = the FT id. Return to `/dev` — it skips RED (the test already exists and is already failing) and goes straight to GREEN against the existing FT, then refactors. Commit, then re-run `/check` from Phase 1. |
+| Track C NFR test failure — first execution (Phase 2b) | Only after the Phase 2b tool/server/env-var resolution table has ruled out an environment cause. If the implementation or config genuinely doesn't meet the threshold: trace suspect Track A task(s) the same way, write a fix task with `skip_red: true`, `target_test` = the TC id. Return to `/dev` — it fixes the implementation/config until the TC's declared threshold passes. Commit, then re-run `/check` from Phase 1. Do not change the pass threshold to make the test pass — that defeats the gate. |
 | Type error or lint error | Fix inline without a full `/dev` cycle. Re-run Safety Gate (lint + type check), then re-run `/check` from Phase 2a. |
-| Acceptance criteria gap — small (missing assertion, wrong test setup, one-line fix) | Return to `/dev` — add the fix as a new Track B or Track C task in `TODO.md`, fix Red-Green-Refactor, commit, then re-run `/check` from Phase 1. |
+| Acceptance criteria gap — small (missing assertion, wrong test setup, one-line fix) | Return to `/dev` — add the fix as a new Track B or Track C task in `TODO.md` (same schema as above), fix Red-Green-Refactor, commit, then re-run `/check` from Phase 1. |
 | Acceptance criteria gap — large (requires new infrastructure, new `/prd` + `/dev` cycle, or affects multiple stories) | **Do NOT fix inline. Stop `/check`.** Create a new story in `sprint.md` for the gap. The new story gets its own `/prd` → `/dev` → `/check` cycle. The current story proceeds to `/uat` or merge without the gap — document it in `HANDOVER.md` as known debt. Never rewrite FTs or TCs to make them pass — that defeats the gate. |
-| Same failure after 3 attempts | Trigger `/spike` — do not keep cycling through `/dev` and `/check`. |
+| Same `target_test` failing after 3 fix attempts | Trigger `/spike` — do not keep generating fix tasks for the same test. |
 
 **Rules:**
 - Update `TODO.md` with the fix task before returning to `/dev` — no silent fixes.

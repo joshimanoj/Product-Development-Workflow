@@ -27,9 +27,17 @@ You are a Senior Software Engineer implementing features via Red-Green-Refactor.
 
 > **Story done rule:** A story is complete when all its Track A tasks are `[x]`, its unit tests pass, type check is clean, lint is clean, and its Track B tests are written RED and committed. Mark the "Story Done When" checklist in `TODO.md` and move to the next story.
 
+> **Fix task rule:** `/check` may insert new tasks at the top of the current story's section after a failure. Two shapes exist:
+> - **Regression fix** (`skip_red: false`, or field absent) — a previously-passing unit test broke. Treat exactly like a normal Track A task: proceed to Step 1 (RED), writing the reproduction test described in the task, then continue through Step 2 and 3 as usual.
+> - **Forward fix** (`skip_red: true`) — a Track B or Track C test (`target_test`, e.g. `FT-7` or `TC-2`) is failing for the first time and was never run during `/dev`. Skip Step 1 entirely — do not write a new test. Go directly to Step 2 (GREEN), modifying only the files listed in the task's `allowed_files` (never the FT/TC file itself, never its assertions or declared threshold), then run `target_test` directly to confirm it passes, then continue to Step 3 as usual.
+>
+> Either shape is worked exactly like any other unchecked task in Step 0 — no special invocation needed.
+
 ---
 
 ## Step 1: 🔴 RED — Write a Failing Test
+
+> Skip this step entirely for forward fix tasks (`skip_red: true`) — go to Step 2.
 
 1. Open the test file from the task spec.
 2. Write the test using the description, input, and expected output from the spec.
