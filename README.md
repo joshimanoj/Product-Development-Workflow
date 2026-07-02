@@ -29,7 +29,7 @@ A complete, opinionated product development workflow built as [Claude Code](http
 | `/dev` | Implementation only. Executes Track A, proves technical correctness with unit and technical integration tests, and writes Track B/Track C tests RED. Supports normal delivery and verification-recovery execution. |
 | `/check` | Verification gate. Runs final lint/type-check, current-epic Track B/Track C, acceptance audit, planned regression, planned critical paths, and CI. Gates `/uat` or merge. Supports normal verification and recovery routing. |
 | `/uat` | Human acceptance testing for UI stories. Manual sign-off on look, feel, and interaction before merge. |
-| `/issue` | Entry point for all new work in existing codebases — classifies as task, bug, improvement, or feature and routes to the correct workflow. |
+| `/issue` | Entry point for all new work in existing codebases — classifies work first, then routes it into the correct planning and delivery path. |
 | `/spike` | Time-boxed (2-4 hr) technical investigation. Triggered by the 3-strike rule or architectural unknowns. Produces a decision record. |
 | `/handover` | Session continuity. Maintains `state.json` and `HANDOVER.md` checkpoints so a new Claude session can warm-start. |
 
@@ -50,9 +50,9 @@ A complete, opinionated product development workflow built as [Claude Code](http
 1. **`/product`** — Define the product vision, users, features, constraints, and risks
 2. **`/design`** — Design the UX through iterative prototype review cycles
 3. **`/architecture`** — Lock in technical decisions (stack, data models, APIs, infra)
-4. **`/sprint`** — Plan sprints and generate user stories from product features
-5. **`/prd`** — Plan implementation and verification for the epic
-6. **`/dev`** — Implement Track A and prove technical correctness
+4. **`/sprint`** — Run in greenfield mode to create the initial roadmap, epics, and stories
+5. **`/prd`** — Run in greenfield mode to plan implementation and verification for the active epic
+6. **`/dev`** — Execute planned Track A work and prove technical correctness
 7. **`/check`** — Verify requirements and regressions, then push to CI
 8. **`/uat`** — Human sign-off for UI stories, then merge
 
@@ -63,6 +63,12 @@ Use **`/issue`** as the entry point. It classifies the work and routes to the ap
 - **Bug fix** → attach to existing story/spec → `/prd` incremental → `/dev` → `/check` → `/uat` if UI
 - **Improvement** → architecture/design check as needed → usually `/sprint` incremental → `/prd` → `/dev` → `/check` → `/uat` if UI
 - **Feature** → architecture/design check as needed → `/sprint` incremental → `/prd` → `/dev` → `/check` → `/uat` if UI
+
+The important distinction is:
+- `/issue` decides what kind of work this is.
+- `/sprint` reshapes roadmap scope when the story/epic structure needs to change.
+- `/prd` reshapes the implementation and verification plan for the active epic.
+- `/dev` and `/check` do not classify work; they execute and verify it.
 
 ### When You're Stuck
 
@@ -85,6 +91,10 @@ Use **`/issue`** as the entry point. It classifies the work and routes to the ap
 - `/prd`: greenfield epic planning or incremental plan repair/update.
 - `/dev`: normal delivery execution or verification-recovery execution.
 - `/check`: normal verification or recovery routing after failure.
+
+These modes line up by responsibility:
+- scope-shaping commands (`/sprint`, `/prd`) support greenfield vs incremental work
+- execution and verification commands (`/dev`, `/check`) support normal vs recovery work
 
 ## License
 
