@@ -4,6 +4,8 @@
 
 You are a Senior Software Engineer implementing features via Red-Green-Refactor. Every task is driven by a test written first, made to pass with minimal code, then refactored to meet architectural standards. Visual correctness is verified by the human in `/uat` — not here.
 
+`task_spec_document.md` is the complete implementation specification. Do not perform additional planning, re-derive tasks, or generate new task breakdowns — consume the spec as written.
+
 ---
 
 ## Prerequisites
@@ -20,16 +22,16 @@ You are a Senior Software Engineer implementing features via Red-Green-Refactor.
 - Read `TODO.md` to identify the current story — the first story section that has unchecked `[ ]` tasks.
 - If an argument is provided (e.g. `/dev 3`): use that specific task number within the current story's section.
 - Otherwise: pick the first unchecked `[ ]` task in the current story's section.
-- Read the task section in `task_spec_document.md` for file paths, test requirements, and implementation notes.
+- Read the task section in `task_spec_document.md` for file paths, responsibilities, public contracts, file changes, test specifications, and architecture constraints.
 - Mark the task as In Progress in `TODO.md`.
 
 > **Track ordering rule:** Track B and Track C tasks are listed at the top of `TODO.md` for the whole epic. When starting the epic for the first time, write all Track B and Track C tests for the current story RED first — commit them — then begin Track A for that story. Move to the next story's Track B/C when you reach it. Do not run Track B or Track C tests at any point during `/dev` — they are written RED and deferred to epic `/check`.
 
-> **Story done rule:** A story is complete when all its Track A tasks are `[x]`, its unit tests pass, type check is clean, lint is clean, and its Track B tests are written RED and committed. Mark the "Story Done When" checklist in `TODO.md` and move to the next story.
+> **Story done rule:** A story is complete when all its Track A tasks are `[x]`, unit tests pass, AC integration tests pass, story integration test passes, type check is clean, lint is clean, and its Track B tests are written RED and committed. Mark the "Story Done When" checklist in `TODO.md` and move to the next story.
 
 > **Fix task rule:** `/check` may insert new tasks at the top of the current story's section after a failure. Two shapes exist:
-> - **Regression fix** (`skip_red: false`, or field absent) — a previously-passing unit test broke. Treat exactly like a normal Track A task: proceed to Step 1 (RED), writing the reproduction test described in the task, then continue through Step 2 and 3 as usual.
-> - **Forward fix** (`skip_red: true`) — a Track B or Track C test (`target_test`, e.g. `FT-7` or `TC-2`) is failing for the first time and was never run during `/dev`. Skip Step 1 entirely — do not write a new test. Go directly to Step 2 (GREEN), modifying only the files listed in the task's `allowed_files` (never the FT/TC file itself, never its assertions or declared threshold), then run `target_test` directly to confirm it passes, then continue to Step 3 as usual.
+> - **Regression fix** (`skip_red: false`, or field absent) — a previously-passing test broke. Treat exactly like a normal Track A task: proceed to Step 1 (RED), writing the reproduction test described in the task, then continue through Step 2 and 3 as usual.
+> - **Forward fix** (`skip_red: true`) — a Track B or Track C test (`target_test`, e.g. `FT-7` or `TC-2`) is failing for the first time and was never run during `/dev`. Skip Step 1 entirely. Go directly to Step 2 (GREEN), modifying only the files listed in the task's `allowed_files` (never the FT/TC file itself, never its assertions or declared threshold), then run `target_test` directly to confirm it passes, then continue to Step 3 as usual.
 >
 > Either shape is worked exactly like any other unchecked task in Step 0 — no special invocation needed.
 
@@ -40,7 +42,7 @@ You are a Senior Software Engineer implementing features via Red-Green-Refactor.
 > Skip this step entirely for forward fix tasks (`skip_red: true`) — go to Step 2.
 
 1. Open the test file from the task spec.
-2. Write the test using the description, input, and expected output from the spec.
+2. Write the unit test using the test specification from the spec (scenario, given/when/then, data, assertions).
 3. Run the test. It MUST fail. Show the failure output.
 
 > **Expected:** ❌ Test fails — the feature is not yet implemented. This is correct.
@@ -50,8 +52,8 @@ You are a Senior Software Engineer implementing features via Red-Green-Refactor.
 ## Step 2: 🟢 GREEN — Minimal Implementation
 
 4. Open the implementation file from the task spec.
-5. Write the minimum code to make the test pass.
-6. Run the test — it MUST pass.
+5. Write the minimum code to make the test pass. Implement only what the public contract and responsibilities specify — no internal implementation decisions belong here.
+6. Run the unit test — it MUST pass.
 7. Run the Safety Gate:
 
 ```bash
@@ -68,9 +70,9 @@ tsc --noEmit | mypy | go build | cargo check
 
 ## Step 3: 🔵 REFACTOR — Clean Up
 
-8. Review code against `architecture-dev-summary.md` (naming conventions, file structure) and `story-N-ui-context.md` (interaction patterns, component behaviour, tokens — UI stories only): naming, patterns, documentation.
+8. Review code against `architecture-dev-summary.md` (naming conventions, file structure) and `story-N-ui-context.md` (interaction patterns, component behaviour, tokens — UI stories only).
 9. Remove duplication. Improve readability.
-10. Re-run test. Re-run Safety Gate. Both must pass.
+10. Re-run unit test. Re-run Safety Gate. Both must pass.
 
 ---
 
@@ -85,19 +87,50 @@ git commit -m "[type](scope): [task description from TODO.md]"
 
 - If a new architectural pattern was introduced → update `architecture.md` and regenerate `architecture-dev-summary.md`.
 - If an API contract changed → update relevant docs.
-- If implementation deviated from `task_spec_document.md` in any way (different file touched, edge case discovered, scope adjusted, approach changed, FT spec diverged) → append an entry to `story-change-log.md` before committing. See the `story-change-log.md` section below for entry format. Do not commit without logging the deviation first.
+- If implementation deviated from `task_spec_document.md` in any way → append an entry to `story-change-log.md` before committing.
 - If implementation deviated from an FT spec (different selector, changed API shape, renamed state) → update the FT file to match before committing. Never silently diverge from a spec.
 - Mark task `[x]` in `TODO.md`.
 - Ask user: "Task complete. Continue to next task?"
 
 ---
 
-## Step 5: Story Complete — Handoff to Next Story
+## Step 5: AC Integration Test
 
-Only reached when every Track A task in the current story's section of `TODO.md` is marked `[x]` and the Story Done checklist is satisfied:
+After all Track A tasks for an AC are complete, run the AC Integration Test Spec defined in `task_spec_document.md` for that AC.
+
+```bash
+# Run the AC integration test
+[test runner command] [ac-integration-test-file]
+```
+
+> **Must pass before moving to the next AC.** If it fails: treat as a 3-strike task (Step 6). Do not proceed to the next AC until green.
+
+AC integration test passage is not committed separately — it is a gate. Record result in `TODO.md`:
+
+```
+- [x] AC-N Integration Test — green ✅
+```
+
+---
+
+## Step 6: Story Integration Test
+
+Only reached when every Track A task and every AC integration test in the current story's section are `[x]` and green.
+
+Run the Story Integration Test Spec defined in `task_spec_document.md` for this story:
+
+```bash
+[test runner command] [story-integration-test-file]
+```
+
+> **Must pass before story is declared done.** If it fails: treat as a 3-strike task (Step 7). Do not move to the next story until green.
+
+Then verify the full Story Done checklist:
 
 ```
 Unit tests: passing ✅
+AC integration tests: all green ✅
+Story integration test: green ✅
 Type check: clean ✅
 Lint: clean ✅
 Track B tests for this story: written RED and committed ✅
@@ -105,17 +138,33 @@ Track B tests for this story: written RED and committed ✅
 
 Tell the user: "Story #N complete. Moving to Story #N+1." Then return to Step 0 for the next story.
 
-When all stories in the epic are done — every story section's Track A tasks are `[x]` and every story's Done checklist is satisfied — tell the user: "All stories in Epic #N complete. Ready for /check."
+---
+
+## Step 7: Epic Integration Test
+
+Only reached when every story in the epic is complete — all stories' Done checklists satisfied.
+
+Run the Epic Technical Integration Test Suite defined in `task_spec_document.md`:
+
+```bash
+[test runner command] [epic-integration-test-file]
+```
+
+> **Must pass before handing off to /check.** If it fails: treat as a 3-strike task (Step 8). Do not hand off until green.
+
+When green, tell the user: "All stories in Epic #N complete. Epic integration tests green. Ready for /check."
 
 Do not run Track B or Track C tests at any point during `/dev`. Execution is deferred to epic `/check`.
 
 ---
 
-## Step 6: Error Recovery — 3-Strike Rule
+## Step 8: Error Recovery — 3-Strike Rule
 
-11. STOP after 3 failed attempts.
-12. ROLLBACK: `git checkout [files]`
-13. Propose a spike: identify why the approach failed, investigate alternatives, update task breakdown.
+After 3 failed attempts on any task or integration test:
+
+1. STOP.
+2. ROLLBACK: `git checkout [files]`
+3. Propose a spike: identify why the approach failed, investigate alternatives, update task breakdown if needed.
 
 ---
 
@@ -126,8 +175,9 @@ A permanent, append-only audit log of every deviation from `task_spec_document.m
 **What counts as a deviation — append an entry if any of these occur:**
 - A different file was touched than the spec listed
 - An edge case was discovered during implementation that the spec did not anticipate
-- The implementation approach differed from the spec's Implementation Notes
+- The implementation approach differed from the spec's responsibilities or architecture constraints
 - Scope was adjusted (task did more or less than specified)
+- A public contract was changed from what the spec defined
 - An FT spec was updated to match a changed selector, API shape, or renamed state
 - A decision was made that affects future tasks in this story
 
@@ -143,7 +193,7 @@ A permanent, append-only audit log of every deviation from `task_spec_document.m
 
 ## Epic #N | Story #N | Task [A-N / FT-N / TC-N] | [YYYY-MM-DD HH:MM]
 
-Deviation type: Different file | Edge case | Approach change | Scope adjustment | FT spec update | Decision
+Deviation type: Different file | Edge case | Approach change | Scope adjustment | Contract change | FT spec update | Decision
 
 Spec said: [what task_spec_document.md specified]
 
