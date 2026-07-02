@@ -2,14 +2,15 @@
 
 ## Purpose
 
-The `/issue` commands are the entry point for all new work in an existing codebase built with this workflow. `/issue` is responsible for classifying the work first, then routing it into the correct downstream planning and delivery path. Claude owns the full execution chain from that point, including artifact checks, pre-flight gates, and downstream command invocations. The human's only inputs after the initial command are the approval gates already defined in those downstream commands.
+The `/issue` commands are the entry point for all user-facing work in an existing codebase built with this workflow. `/issue` is responsible for classifying the work first, then routing it into the correct downstream planning and delivery path. Claude owns the full execution chain from that point, including artifact checks, pre-flight gates, and downstream command invocations. The human's only inputs after the initial command are the approval gates already defined in those downstream commands.
+
+Pure internal implementation tasks sit outside this classifier and should be handled directly inside the active planning and execution flow rather than introduced through `/issue`.
 
 ---
 
 ## Command Format
 
 ```
-/issue-task        "description"
 /issue-bugfix      "description"
 /issue-improvement "description"
 /issue-feature     "description"
@@ -49,7 +50,6 @@ Claude proposes the classification using the rules below, then asks for confirma
 
 | Command | Typical classification | User-facing change? | Needs story? | Entry point after classification |
 |------|-------------------|--------------|-------------|
-| `/issue-task` | Internal task | No | No | `/dev` |
 | `/issue-bugfix` | Bug fix | Usually yes | Yes — reopen existing story | `/prd` incremental |
 | `/issue-improvement` | Improvement to existing feature | Yes | Yes — existing story or new story in existing roadmap | usually `/sprint` incremental, then `/prd` |
 | `/issue-feature` | New feature | Yes | Yes — new epics/stories in existing roadmap | `/sprint` incremental, then `/prd` |
@@ -65,53 +65,6 @@ Before any type-specific steps, Claude always:
 1. Reads `HANDOVER.md` — most recent checkpoint only — to establish current project state.
 2. Reads `architecture-dev-summary.md` — stack, naming conventions, file structure, test commands.
 3. Reads `Sprint.md` — current story index and active sprint status.
-
----
-
-## /issue-task
-
-**Definition:** Work with no user-facing outcome. The user would not notice if this was done or not done.
-
-### Execution Chain
-
-```
-1. Pre-flight (HANDOVER.md + architecture-dev-summary.md + Sprint.md)
-2. Architecture impact check
-3. Write task spec → add to TODO.md
-4. /dev → /check
-```
-
-### Step-by-Step
-
-**Step 1 — Architecture impact check:**
-Does this task change stack, naming conventions, file structure, or test strategy?
-- If yes → update `architecture.md` + regenerate `architecture-dev-summary.md` before proceeding. Tell the user what changed.
-- If no → proceed.
-
-**Step 2 — Write task spec:**
-Claude writes a minimal `task_spec_document.md`:
-```markdown
-# Task: [description]
-Date: [YYYY-MM-DD]
-
-Files:
-  Test: [path]
-  Implementation: [path]
-
-What to do: [specific change]
-Test requirements: [what must pass]
-Notes: [any constraints from architecture-dev-summary.md]
-```
-Add a single entry to `TODO.md`:
-```markdown
-- [ ] [description] — [estimated time]
-```
-
-**Step 3 — Execute:**
-Run `/dev` → `/check`.
-
-**Step 4 — Handover:**
-After `/check` passes, Claude updates `HANDOVER.md` checkpoint and `Sprint.md` as usual.
 
 ---
 
