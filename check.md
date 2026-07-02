@@ -78,12 +78,31 @@ npm run lint | flake8 | golangci-lint | cargo clippy | swiftlint | ktlint
 
 Run all Track B functional tests accumulated across all stories in the epic — per-story tests plus cross-story flow tests. All must be GREEN before proceeding. This is the first time these tests execute — they were written RED during `/dev` and deferred to here.
 
+Before running each Track B suite, verify the required runtime and tool availability using the functional test setup policy locked in `architecture.md` Section 8.
+
+Apply this resolution logic:
+
+| Situation | Action |
+|-----------|--------|
+| Web/PWA tool missing, marked auto-installable in architecture.md | Install silently, then continue. |
+| Web/PWA browser/runtime dependency missing, marked auto-installable in architecture.md | Install silently, then continue. |
+| Dev server or app process required and command is declared in architecture.md or task spec | Start it, run the tests, then stop it. |
+| iOS/Android framework is present and simulator/emulator target is already configured | Boot the declared target and run the tests. |
+| iOS/Android prerequisite is missing and architecture.md marked it user-managed (Xcode, Android SDK, emulator image, signing, native runtime setup) | Stop. Tell the user exactly what prerequisite is missing and that it must be set up manually before re-running `/check`. |
+| Platform/tool requirement is ambiguous or was never declared in architecture.md | Stop. Return to planning/architecture correction — do not guess at verification time. |
+
 ```bash
 npx playwright test e2e/epic-n/          # web — runs all story subdirs + cross-story dir
 detox test --configuration ios.sim.release    # mobile (iOS)
 detox test --configuration android.emu.release  # mobile (Android)
 flutter drive --target=test_driver/app.dart     # Flutter
 ```
+
+Track B orchestration rules:
+- `/check` owns runtime orchestration and execution, not framework selection.
+- `/check` may auto-install only lightweight tooling explicitly allowed by architecture.md.
+- `/check` may start declared app/server processes and boot already-configured browser/simulator/emulator targets.
+- `/check` must not improvise heavy mobile environment setup on behalf of the user.
 
 ---
 

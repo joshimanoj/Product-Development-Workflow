@@ -426,8 +426,13 @@ Scenario Type: [Happy Path | Edge / Boundary | Error / Validation | Alternate Fl
 Linked AC(s): [AC-1, AC-2]
 Criterion (from story-N.md, if directly tied to one AC): [exact text or "derived scenario"]
 Source: [explicit AC | derived risk]
+Target Platform: [Web | PWA | iOS | Android]
+Functional Test Tool: [from architecture.md Section 8 Functional test platform matrix]
 Test File: e2e/[story-name]/[scenario-slug].spec.ts
 Framework: [Playwright / Detox / XCUITest / patrol]
+Runtime Target: [browser | simulator | emulator | device]
+App / Server Boot Requirement: [exact command from architecture.md or "already running"]
+Setup Ownership: [auto-resolved by /check | pre-installed by user per architecture.md]
 
 [For Environmental scenarios — specify condition]:
 Environment condition: [e.g. network offline / throttled to 3G / connection interrupted mid-request]
@@ -545,6 +550,12 @@ Architecture Constraints:
 ### Track B — Functional Test Tasks
 
 Generate Track B tasks from the approved QA Scenario Matrix. Preserve the current functional / edge / environmental AC coverage, and expand it with any approved derived QA scenarios from Phase 2b. Track B remains written RED, committed alongside implementation, and executed at epic-level `/check`. `/dev` writes these tests RED and moves on — it does not run them.
+
+Track B platform-planning rules:
+- Select the functional test tool and runtime from `architecture.md` Section 8 — do not invent platform tooling in `/prd`.
+- For each QA scenario, explicitly mark the target platform(s): Web, PWA, iOS, Android, or a justified subset.
+- If one logical scenario must run on multiple platforms, generate one platform-specific FT spec per platform unless the architecture or product scope explicitly says otherwise.
+- If a platform requires user-managed prerequisites (for example Xcode, Android SDK, simulator/emulator images, signing, or native device setup), record that dependency in the FT spec rather than deferring the decision to `/check`.
 
 **Hard rule: gaps are resolved at /prd time, not discovered at /check time.** Before writing any FT, apply this resolution logic:
 

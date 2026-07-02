@@ -153,6 +153,18 @@ Integration tests: [approach and tooling]
 E2E / Functional: [Playwright / Detox / XCUITest / patrol — used to execute the Track B functional scenarios planned in /prd]
 Coverage target: [e.g. 80% unit test coverage minimum]
 
+Functional test platform matrix (required — this is the source of truth for `/prd`, `/dev`, and `/check`):
+- Web: [tool | runtime target | app/server start command | auto-installable Yes/No]
+- PWA: [tool | runtime target | offline/cache/install coverage expectations | auto-installable Yes/No]
+- iOS: [tool | simulator/device target | build/run command | pre-installed prerequisites required]
+- Android: [tool | emulator/device target | build/run command | pre-installed prerequisites required]
+
+Functional test setup policy (required):
+- Lightweight auto-installable tooling: [what `/check` may install automatically — e.g. npm Playwright package, browser binaries]
+- Pre-installed user-managed tooling: [what must already exist before `/check` — e.g. Xcode, Android SDK, simulator/emulator images, signing setup]
+- Runtime boot expectations: [what `/check` starts itself — e.g. dev server, app process, simulator if already configured]
+- Failure policy: [when `/check` stops and asks the user to complete platform setup manually]
+
 Mobile targets (confirmed here — used by /sprint, /prd, and CI from this point on):
 iOS Simulator: [Yes / No] — [device name, OS version e.g. iPhone 15, iOS 17]
 Android Emulator: [Yes / No] — [device name, API level e.g. Pixel 7, API 34]
