@@ -17,6 +17,7 @@ Planning Defect Intake is a special case of `/prd` incremental mode, not a separ
 Use this shared lifecycle model consistently across `/prd`, `/dev`, and `/check`:
 
 - Normal delivery loop: `/prd` → `/dev` → `/check` → `/uat` or merge
+- Story refinement loop: `/prd` → `/sprint` → `/prd`
 - Planning failure loop: `/check` → `/prd` → `/dev` if new implementation work was added → `/check`
 - Verification failure loop: `/check` → `/dev` → `/check`
 
@@ -56,6 +57,7 @@ Typical triggers:
 - `/check` produced a Planning Defect Report
 - `/issue` + `/sprint` changed or added stories inside an existing roadmap
 - an approved scope change reopens an existing epic and requires updates to `task_spec_document.md` or `TODO.md`
+- the QA Scenario Matrix exposed missing product behaviour in an existing story and `/sprint` refined that story in place
 
 Incremental planning rules:
 - repair or update only the named artefacts and affected sections
@@ -149,7 +151,7 @@ Auto-detect from project config files. Claude should apply the same detection lo
 
 ---
 
-## Phase 2: AC Classification Pass
+## Phase 2a: AC Classification Pass
 
 **This pass happens before any tasks are written.** Read `epic-N.md` to understand the full epic scope and cross-story notes. Then read each `story-N.md` in the suggested order from `epic-N.md`. For every acceptance criterion across all stories, classify it into exactly one category. No AC may be left unclassified. If classification is unclear, resolve with the human before proceeding.
 
@@ -161,7 +163,9 @@ Auto-detect from project config files. Claude should apply the same detection lo
 | Non-Functional — Tool-driven | Automatable NFR (performance, accessibility, security) | Track C (tool from architecture.md Section 8) |
 | Non-Functional — Human/UAT | Subjective / human judgment only | UAT-only — document reason, get human confirmation now |
 
-Also identify cross-story Track B tests at this stage — user journeys that span multiple stories (e.g. sign up → verify email → first login). These are additional Track B tests beyond the per-story ones, written here and run at epic CHECK.
+This step is requirements classification only. Do not treat it as the full functional test-design output. The QA Scenario Matrix in Phase 2b is a separate layer that expands functional coverage for Track B.
+
+Also identify obvious cross-story Track B candidates at this stage — user journeys that span multiple stories (e.g. sign up → verify email → first login). These are confirmed and materialized in the QA Scenario Matrix before task generation.
 
 Present the full classification table grouped by story, plus cross-story tests, and wait for human confirmation:
 
@@ -185,6 +189,84 @@ Confirm?
 ```
 
 Human must confirm before proceeding to task generation.
+
+---
+
+## Phase 2b: QA Scenario Matrix
+
+After the AC Classification Pass is confirmed, generate a separate QA Scenario Matrix for the epic. This is the functional test-design layer used to plan Track B coverage. It does not replace AC classification; it expands it into concrete scenarios.
+
+Generate story-scoped rows for all functional behaviour that should be tested, including:
+- happy path
+- edge / boundary cases
+- error / validation cases
+- alternate flows
+- environmental / interrupted-state flows
+- cross-AC flows within a story
+- cross-story flows across the epic
+- role / permission / state-transition scenarios when materially relevant
+
+Each scenario row must include:
+- Scenario ID
+- Scenario Type
+- Linked AC(s)
+- Scenario statement
+- Expected result
+- Verification Track (`Track B`, `Track C`, or `UAT`)
+- Priority (`must test` or `should test`)
+- Source (`explicit AC` or `derived risk`)
+
+Routing rules:
+- Functional, edge, alternate, error, and environmental scenarios map to `Track B`.
+- Tool-driven NFR items do not become Track B scenarios — they map to `Track C`.
+- Human-judgment-only items do not become Track B scenarios — they remain `UAT` only.
+- Derived scenarios are allowed when they close an obvious functional risk gap, but if they introduce ambiguous product behaviour, stop and resolve that ambiguity with the human before generating tasks.
+
+Story-refinement loop rules:
+- If the scenario is already clearly answerable from the existing story and AC intent, keep it in the QA Scenario Matrix and proceed.
+- If the scenario exposes missing or ambiguous product behaviour, do not guess and do not silently encode a rule in Track B.
+- Instead, stop and hand back a story refinement request to `/sprint` incremental mode so the affected `story-N.md` can be updated first.
+- Resume `/prd` only after the affected story detail is clarified.
+
+Typical refinement triggers:
+- missing validation or boundary rule (e.g. min/max length, allowed characters, size limits)
+- missing alternate-flow behaviour where multiple reasonable product choices exist
+- missing recovery or persistence behaviour (retry, refresh, interrupted state, resume)
+- missing role / permission rule
+- missing error-handling expectation across UI / API boundaries
+
+Present the QA Scenario Matrix grouped by story and wait for confirmation:
+
+```markdown
+QA Scenario Matrix — Epic #N:
+
+Story #1: [Title]
+  QS-1 | Happy path | AC-1 | User submits valid form and sees confirmation | Track B | must test | explicit AC
+  QS-2 | Error / validation | AC-1, AC-2 | Blank email shows inline validation and blocks submit | Track B | must test | explicit AC
+  QS-3 | Environmental | AC-3 | Submit while offline shows recovery state and preserves entered values | Track B | must test | explicit AC
+  QS-4 | Alternate flow | AC-1 | User corrects invalid input and successfully resubmits | Track B | should test | derived risk
+
+Story #2: [Title]
+  QS-5 | Happy path | AC-4 | ...
+
+Cross-story:
+  QS-X | Cross-story | AC-1, AC-4, AC-7 | Sign up -> verify email -> first login | Track B | must test | explicit AC
+```
+
+Human must confirm the QA Scenario Matrix before proceeding to Regression Planning or task generation.
+
+If refinement is required, return control with this format:
+
+```markdown
+Story Refinement Required — Epic #N
+
+Story: Story #[N] — [Title]
+Triggered by: QS-[N] [Scenario Type]
+Missing detail: [validation rule | boundary rule | alternate flow | recovery behaviour | permission rule | error-handling expectation]
+Why `/prd` cannot proceed: [two reasonable product behaviours still exist]
+Required `/sprint` update: [exact story section / AC / note to refine]
+Resume point: Re-run `/prd` Phase 2b for this epic after story refinement.
+```
 
 ---
 
@@ -339,12 +421,15 @@ Failure meaning: [what a failure at this boundary indicates]
 
 **Functional Test Spec**
 
-Criterion (from story-N.md): [exact text]
-AC type: Functional — [Happy Path | Edge Case | Environmental]
-Test File: e2e/[story-name]/[criterion-slug].spec.ts
+Scenario ID: [QS-N]
+Scenario Type: [Happy Path | Edge / Boundary | Error / Validation | Alternate Flow | Environmental | Cross-AC | Cross-story]
+Linked AC(s): [AC-1, AC-2]
+Criterion (from story-N.md, if directly tied to one AC): [exact text or "derived scenario"]
+Source: [explicit AC | derived risk]
+Test File: e2e/[story-name]/[scenario-slug].spec.ts
 Framework: [Playwright / Detox / XCUITest / patrol]
 
-[For Environmental ACs — specify condition]:
+[For Environmental scenarios — specify condition]:
 Environment condition: [e.g. network offline / throttled to 3G / connection interrupted mid-request]
 Setup: [how to apply the condition in the test framework]
 
@@ -459,7 +544,7 @@ Architecture Constraints:
 
 ### Track B — Functional Test Tasks
 
-For every functional criterion and edge case AC across all stories in the epic (UI and backend — see classification table above), define one functional test task. Also include cross-story flow tests and story cross-AC tests identified above. Written RED — committed alongside implementation, executed at epic-level `/check`. `/dev` writes them RED and moves on — it does not run them.
+Generate Track B tasks from the approved QA Scenario Matrix. Preserve the current functional / edge / environmental AC coverage, and expand it with any approved derived QA scenarios from Phase 2b. Track B remains written RED, committed alongside implementation, and executed at epic-level `/check`. `/dev` writes these tests RED and moves on — it does not run them.
 
 **Hard rule: gaps are resolved at /prd time, not discovered at /check time.** Before writing any FT, apply this resolution logic:
 
@@ -467,9 +552,15 @@ For every functional criterion and edge case AC across all stories in the epic (
 - **Testable but requires infrastructure that does not yet exist** (e.g. emulator, seed helpers, auth test hooks, mock server) → add a Track A prerequisite task for that infrastructure first, then write the FT.
 - **Untestable as written** (too vague, purely subjective, depends on a third party) → stop and resolve with the human right now before generating any tasks. Either sharpen the criterion into something measurable (e.g. "feels fast" → "renders within 500ms") or explicitly mark it UAT-only and document why no FT is possible.
 
+Additional Track B rules:
+- Keep the current separate-test rule for edge and environmental coverage — never bundle them into the happy path.
+- A single AC may map to multiple Track B scenarios when the QA Scenario Matrix calls for it.
+- A single Track B spec may cover multiple ACs only when the approved scenario is explicitly cross-AC or cross-story.
+- Do not invent unapproved functional scenarios while writing Track B tasks. Add them in Phase 2b first, then generate the FT.
+
 Do not write a stub that can never pass. Do not defer gaps to `/check` — a gap found at `/check` that was not declared here is a `/prd` planning failure. `/check` will write a Planning Defect Report, return control to `/prd`, and require regeneration of the affected planning artefacts before verification resumes.
 
-Track B tasks are grouped by AC within each story section (see Story Structure above).
+Track B tasks are grouped by story within each story section and should reference the Scenario ID they implement.
 
 ### Track C — NFR Test Tasks
 
@@ -505,10 +596,15 @@ After generating all tracks, Claude performs an explicit reverse-trace before pr
 
 ```
 For each AC in story-N.md:
-  → Confirm it appears in exactly one row of the Phase 2 classification table
-  → Confirm it maps to exactly one verification outcome: Track B test, Track C test, or approved UAT-only item
+  → Confirm it appears in exactly one row of the Phase 2a classification table
+  → Confirm it maps to at least one verification outcome: Track B test, Track C test, or approved UAT-only item
   → Confirm at least one Track A, B, or C task directly enables or tests it
   → If no task maps to an AC → add the missing task before presenting
+
+For each QA Scenario Matrix row marked Track B and must test:
+  → Confirm it has a corresponding FT spec and TODO entry
+  → Confirm the FT references the correct Scenario ID and linked AC(s)
+  → If a required scenario has no FT → add the missing FT before presenting
 
 For each Track A task:
   → Confirm every file it touches either exists or is being created by another Track A task
@@ -537,7 +633,7 @@ For regression planning:
   → If a regression target is referenced but not executable → stop and fix the planning artefact before presenting
 ```
 
-Only present tasks to the user after the reverse-trace is clean. State explicitly: "Reverse-trace complete — all ACs mapped, verification coverage complete, no missing tasks found." or list what was added.
+Only present tasks to the user after the reverse-trace is clean. State explicitly: "Reverse-trace complete — all ACs mapped, required QA scenarios mapped, verification coverage complete, no missing tasks found." or list what was added.
 
 ---
 
@@ -559,10 +655,10 @@ Rules:
 
 ### Track B — Functional Tests (written RED, run at epic /check)
 
-- [ ] FT-1: [Story #1 — AC-1 Happy Path] — e2e/epic-n/story-1/criterion-1.spec.ts — 8 min
-- [ ] FT-2: [Story #1 — AC-2 Edge Case] — e2e/epic-n/story-1/criterion-2.spec.ts — 6 min
-- [ ] FT-3: [Story #1 — AC-3 Environmental] — e2e/epic-n/story-1/criterion-3.spec.ts — 7 min
-- [ ] FT-4: [Story #1 — Cross-AC flow] — e2e/epic-n/story-1/cross-ac-flow-1.spec.ts — 8 min
+- [ ] FT-1: [Story #1 — QS-1 Happy Path] — e2e/epic-n/story-1/happy-path-submit.spec.ts — 8 min
+- [ ] FT-2: [Story #1 — QS-2 Error / Validation] — e2e/epic-n/story-1/blank-email-validation.spec.ts — 6 min
+- [ ] FT-3: [Story #1 — QS-3 Environmental] — e2e/epic-n/story-1/offline-submit.spec.ts — 7 min
+- [ ] FT-4: [Story #1 — QS-4 Cross-AC flow] — e2e/epic-n/story-1/cross-ac-flow-1.spec.ts — 8 min
 
 ### Track C — NFR Tests (written RED, run at epic /check)
 
@@ -596,7 +692,7 @@ Rules:
 
 ### Track B — Functional Tests (written RED, run at epic /check)
 
-- [ ] FT-5: [Story #2 — AC-4 Happy Path] — e2e/epic-n/story-2/criterion-1.spec.ts — 8 min
+- [ ] FT-5: [Story #2 — QS-5 Happy Path] — e2e/epic-n/story-2/criterion-1.spec.ts — 8 min
 
 ### Track C — NFR Tests (written RED, run at epic /check)
 
@@ -764,14 +860,15 @@ Reply with: ✅ APPROVED — all items checked, ready to merge | ❌ CHANGES NEE
 3. Detect tech stack from config files. Ask user if uncertain.
 4. Verify `.github/workflows/ci.yml` exists. If missing: stop and tell the user "CI file not found — return to Sprint 0 to set it up before running /prd." If present: proceed — no changes needed.
 5. Show pre-flight summary and wait for confirmation.
-6. **Run the AC Classification Pass (Phase 2)** — read each `story-N.md` in the epic's suggested order. For every AC across all stories, classify into Functional (Happy Path / Edge Case / Environmental) or Non-Functional (Tool-driven / Human/UAT). Also identify cross-story Track B flows. Present the full classification table grouped by story to the human and wait for confirmation. Resolve all UAT-only declarations now.
-7. **Run Regression Planning (Phase 3)** — analyse planned file changes per story. Generate Technical Regression Manifest and Functional Regression Manifest. Present both to the human and wait for confirmation.
-8. Generate Track B — one FT per functional AC (Happy Path, Edge Case, Environmental) across all stories, plus cross-story flows and story cross-AC flows. Apply the resolution logic in the Track B section. Edge cases and Environmental conditions each get their own FT — never bundled.
-9. Generate Track C — one TC per Non-Functional Tool-driven AC. Tool must come from architecture.md Section 8. Track C listed flat by NFR type.
-10. Generate Track A — story by story, reading each `story-N.md` individually. For each story: define Public Contracts first, then for each AC define Implementation Tasks, Unit Test Spec, and AC Integration Test Spec. After all ACs: define Story Integration Test Spec and Story Cross-AC Track B spec. After all stories: define Epic Technical Integration Test Suite. No implementation code — specifications only (Responsibilities, Public Contracts, File Changes, Test Specifications, Architecture Constraints).
-11. **Run the Completeness Reverse-Trace (Phase 5)** — verify every AC maps to at least one task, every file exists or is being created, every shared dependency has its own task, every Track C tool is in architecture.md, all integration test specs reference valid ACs. Add any missing tasks. State result explicitly.
-12. Write `task_spec_document.md` — one document for the epic, sectioned by story. Contains Public Contracts, AC-grouped Track A + Track B tasks, Story Integration Test Specs, Epic Technical Integration Test Suite, Track C section, and both Regression Manifests.
-13. For each UI story, generate `story-N-ui-context.md` — pull only matching entries from `Design.md §4`, `UI_Patterns.md`, Component Behavior Guide, and `theme.json`. This is the only design file `/dev` loads for that story.
-14. For UI epics, generate `epic-N-uat.md` — the UAT checklist covering all stories and cross-story flows.
-15. Write `TODO.md` — one document for the epic, sectioned by story. Within each story section, list Track B, then Track C, then Track A, then AC Integration Tests, then Story Integration Test. Keep cross-story flows and epic acceptance items in `Epic Acceptance`.
-16. Tell user: "Tasks ready for Epic #N ([N] stories, [M] Track B tests, [P] Track C tests). Run /dev to start Story #[first]."
+6. **Run the AC Classification Pass (Phase 2a)** — read each `story-N.md` in the epic's suggested order. For every AC across all stories, classify into Functional (Happy Path / Edge Case / Environmental) or Non-Functional (Tool-driven / Human/UAT). Present the full classification table grouped by story to the human and wait for confirmation. Resolve all UAT-only declarations now.
+7. **Run the QA Scenario Matrix (Phase 2b)** — expand the approved functional AC coverage into concrete QA scenarios per story: happy path, edge, error, alternate flow, environmental flow, cross-AC flow, and cross-story flow where relevant. Mark each scenario with linked AC(s), verification track, priority, and whether it is explicit AC coverage or a derived risk. Present the matrix to the human and wait for confirmation.
+8. **Run Regression Planning (Phase 3)** — analyse planned file changes per story. Generate Technical Regression Manifest and Functional Regression Manifest. Present both to the human and wait for confirmation.
+9. Generate Track B — create FT specs from the approved Track B rows in the QA Scenario Matrix, including the existing functional / edge / environmental AC coverage plus any approved derived scenarios, cross-story flows, and story cross-AC flows. Apply the resolution logic in the Track B section. Edge cases and Environmental conditions each get their own FT — never bundled.
+10. Generate Track C — one TC per Non-Functional Tool-driven AC. Tool must come from architecture.md Section 8. Track C listed flat by NFR type.
+11. Generate Track A — story by story, reading each `story-N.md` individually. For each story: define Public Contracts first, then for each AC define Implementation Tasks, Unit Test Spec, and AC Integration Test Spec. After all ACs: define Story Integration Test Spec and Story Cross-AC Track B spec. After all stories: define Epic Technical Integration Test Suite. No implementation code — specifications only (Responsibilities, Public Contracts, File Changes, Test Specifications, Architecture Constraints).
+12. **Run the Completeness Reverse-Trace (Phase 5)** — verify every AC maps to at least one task or approved verification outcome, every required QA scenario maps to Track B / Track C / UAT as planned, every file exists or is being created, every shared dependency has its own task, every Track C tool is in architecture.md, all integration test specs reference valid ACs. Add any missing tasks. State result explicitly.
+13. Write `task_spec_document.md` — one document for the epic, sectioned by story. Contains Public Contracts, QA Scenario Matrix references, AC-grouped Track A + Track B tasks, Story Integration Test Specs, Epic Technical Integration Test Suite, Track C section, and both Regression Manifests.
+14. For each UI story, generate `story-N-ui-context.md` — pull only matching entries from `Design.md §4`, `UI_Patterns.md`, Component Behavior Guide, and `theme.json`. This is the only design file `/dev` loads for that story.
+15. For UI epics, generate `epic-N-uat.md` — the UAT checklist covering human-judgment items plus visible per-story and cross-story flows from the approved plan.
+16. Write `TODO.md` — one document for the epic, sectioned by story. Within each story section, list Track B, then Track C, then Track A, then AC Integration Tests, then Story Integration Test. Keep cross-story flows and epic acceptance items in `Epic Acceptance`.
+17. Tell user: "Tasks ready for Epic #N ([N] stories, [M] Track B tests, [P] Track C tests). Run /dev to start Story #[first]."

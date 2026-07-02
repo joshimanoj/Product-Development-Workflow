@@ -228,3 +228,212 @@ notify("UAT checklist ready — please review")
 notify("/check failed — CI is red, rollback needed")
 notify("Handover saved — safe to close session")
 ```
+
+---
+
+# Session Handover: 2026-07-02 15:08 IST
+
+## 1. Executive Summary
+
+Objective: Tighten the core `/prd`, `/dev`, and `/check` workflow docs around planning failures, verification failures, shared lifecycle flow, and `TODO.md` structure.
+Outcome: Partial
+Momentum: High — the repo is in the middle of a workflow-doc cleanup, with the next clear task being point `2` (restart-rule cleanup and deciding whether `/check` should re-run Track A coverage).
+
+## 2. Progress & Completed Work
+
+Files Modified:
+- `prd.md`
+- `dev.md`
+- `check.md`
+
+Logic Updated:
+- Added a Planning Defect Intake flow to `/prd`.
+- Expanded Planning Defect Report taxonomy in `/check` and aligned `/prd` intake handling with it.
+- Added explicit verification failure loop documentation for `/check -> /dev -> /check`.
+- Added a shared workflow model section to `/prd`, `/dev`, and `/check`.
+- Made `TODO.md` structure canonical and story-scoped in `/prd`, and aligned `/dev`’s current-story interpretation to that structure.
+
+Logic Verified:
+- Text consistency pass only.
+- Confirmed the moved working repo is `/Users/manojjoshi/Desktop/Personal/Projects/Product-Development-Workflow`.
+- Confirmed current branch state: `main...origin/main` with modified `prd.md`, `dev.md`, and `check.md`.
+
+## 3. Technical Debt & Debugging Log
+
+Resolved / clarified:
+- Planning failures now route explicitly from `/check` to `/prd`.
+- Verification failures now route explicitly from `/check` to `/dev`.
+- `TODO.md` is no longer described as an epic-top-level FT/TC list in the active model; it is now story-scoped in the latest edits.
+
+Failed / blocked approaches:
+- An earlier patch attempt targeted the old repo location under `echo` after the repo had been moved. Work continued successfully after switching to the moved repo path.
+
+Current warnings:
+- Point `2` has not been implemented yet: restart semantics are still contradictory in `/check`.
+- `/check` still re-runs affected unit tests and technical integration coverage, even though `/dev` already runs AC integration, story integration, and epic technical integration gates.
+- `HANDOVER.md` in this repo doubles as the command spec document; this session handover was appended to the bottom rather than replacing that content.
+- No `.claude/state.json` exists in the moved repo.
+
+## 4. Architectural & Strategic Decisions
+
+Decision: Use a shared lifecycle model across `/prd`, `/dev`, and `/check`.
+Rationale: The workflow logic had become correct in pieces but hard to read as a system. A shared model reduces drift and makes failure routing easier to follow.
+Future Impact: Any further edits to restart rules or CI flow should preserve the same canonical loops in all three docs.
+
+Decision: Make `TODO.md` story-scoped and canonical.
+Rationale: `/prd`, `/dev`, and `/check` were interpreting `TODO.md` inconsistently. A story-scoped structure makes current-story selection and fix-task insertion deterministic.
+Future Impact: Any future `TODO.md` examples or rules should keep the same ordering: Track B -> Track C -> Track A -> AC Integration Tests -> Story Integration Test.
+
+Decision: Keep AC classification separate from the QA scenario layer used to plan Track B.
+Rationale: Requirements categorization and functional test-design serve different purposes. Keeping them separate allows `/prd` to preserve the current Functional / Edge / Environmental model while still planning derived Track B scenarios when needed.
+Future Impact: Any future edits to `/prd`, `/check`, `/dev`, or `/uat` should preserve the boundary: AC classification defines requirement type, QA scenarios define Track B coverage, Track C owns automatable NFRs, and UAT owns human-judgment verification.
+
+## 5. Environment & Context
+
+Repo Path:
+- `/Users/manojjoshi/Desktop/Personal/Projects/Product-Development-Workflow`
+
+Important Files:
+- `prd.md`: planning flow, planning defect intake, canonical `TODO.md` generation
+- `dev.md`: task execution, fix-task handling, story completion gates
+- `check.md`: verification flow, failure routing, local/CI gate behavior
+
+Git State:
+- Modified but uncommitted: `prd.md`, `dev.md`, `check.md`
+
+## 6. Unresolved Threads & The Wall
+
+Blocked By:
+- Nothing external; next work is a doc-logic cleanup decision.
+
+Mental Context:
+- The next major task is “point `2`”: remove contradictory restart rules and decide the intended boundary between `/dev` Track A verification and `/check` re-verification.
+- Specifically, verify and likely resolve:
+  - `Repo Setup` in `/check` pushes before local verification, which conflicts with the “push to CI only after local green” intent.
+  - Phase 5 text in `/check` says rerun from failed phase, while Phase 5b rules say rerun from Phase 1.
+  - Static-fix row in `/check` says rerun from Phase 2a, which conflicts with the broader “rerun from Phase 1” rule.
+  - `/dev` step references for AC/story integration test failures appear wrong and should likely point to Step 8, not Steps 6/7.
+- Also, before implementing point `2`, the user explicitly asked to confirm whether `/check` was supposed to avoid rerunning unit/integration tests already covered by `/dev`.
+- Current conclusion: `/check` still re-runs affected unit tests and technical integration coverage, so the docs are not yet aligned with a strict “no Track A reruns in `/check`” model.
+
+## 7. Immediate Next Steps (priority order)
+
+1. Re-open point `2` and decide the canonical restart policy:
+   - preferred default discussed: rerun `/check` from Phase 1 after any repaired failure, with only a narrow inline Phase 1 exception for immediate static re-checks.
+2. Decide whether `/check` should continue running affected unit tests and technical integration coverage, or whether final local verification should be limited to Track B, Track C, and regression-only deltas.
+3. Update `check.md` to remove contradictory restart rules and align Repo Setup / CI timing with the chosen policy.
+4. Update `dev.md` step references for integration failure recovery if confirmed incorrect.
+5. After that, optionally do a final clarity pass on structure if needed, but only after point `2` is settled.
+
+---
+
+# Session Handover: 2026-07-02 17:05 IST
+
+## 1. Executive Summary
+
+Objective: Finish the workflow-doc alignment beyond `/prd`, `/dev`, and `/check`, especially around `/issue`, `/sprint`, incremental planning, and top-level README consistency.
+Outcome: Completed for the workflow docs; continuity note recorded here only.
+Momentum: High — the command set now has a much more coherent ownership model, and the next session can focus on residual polish instead of foundational restructuring.
+
+## 2. Progress & Completed Work
+
+Files Modified:
+- `README.md`
+- `issue.md`
+- `sprint.md`
+- `prd.md`
+- `dev.md`
+- `check.md`
+- `handover.md`
+
+Logic Updated:
+- Made `/issue` the classifier for existing-codebase work and explicitly split work into:
+  - new feature
+  - improvement to existing feature
+  - bug fix
+- Reworked `/issue-feature` and `/issue-improvement` so they route through architecture/design checks and then `/sprint` incremental mode instead of treating `/sprint` as greenfield-only.
+- Clarified that bug fixes should not go directly to bare `/dev`; they must first be attached to the relevant story/planning context and then flow through `/prd` incremental mode.
+- Added explicit `greenfield` and `incremental` modes to `/sprint`.
+- Formalized `/prd` incremental mode and clarified that Planning Defect Intake is a special case of it.
+- Added explicit execution/verification mode language to:
+  - `/dev` — normal delivery mode vs verification recovery mode
+  - `/check` — normal verification mode vs recovery mode
+- Updated `README.md` so the top-level workflow summary matches the new classification and mode model.
+
+Logic Verified:
+- Text consistency pass only.
+- Created commit `1556196` with message:
+  - `docs(workflow): align issue routing and command modes`
+- Commit intentionally includes only:
+  - `README.md`
+  - `issue.md`
+  - `sprint.md`
+  - `prd.md`
+  - `dev.md`
+  - `check.md`
+
+## 3. Technical Debt & Debugging Log
+
+Resolved / clarified:
+- `/issue` is now the correct classification and routing surface for existing-codebase work.
+- `/sprint` is no longer implicitly single-shot; it now has explicit incremental behavior.
+- `/prd` incremental behavior is now recognized as a first-class planning mode rather than only a `/check` recovery special case.
+- `handover.md` is not part of the repo workflow redesign itself; it remains session-continuity infrastructure for Codex.
+
+Current warnings:
+- `handover.md` is modified locally for session continuity and intentionally not included in commit `1556196`.
+- No tests were run because all changes in this pass were documentation-only.
+- The docs are now structurally aligned, but a future pass may still want to simplify wording or remove any remaining repetitive explanation.
+
+## 4. Architectural & Strategic Decisions
+
+Decision: `/issue` owns work classification for existing-codebase flows.
+Rationale: The system needed one surface that decides whether the work is a new feature, improvement, or bug fix before downstream commands are invoked.
+Future Impact: Any new existing-codebase entrypoints should either defer to `/issue` or stay strictly internal/non-user-facing.
+
+Decision: `/sprint`, `/prd`, `/dev`, and `/check` all now expose explicit mode language.
+Rationale: The workflow had already developed fresh/incremental/recovery behavior in practice, but only parts of the docs admitted it. Making the modes explicit reduces ambiguity.
+Future Impact: Future command changes should preserve the same pattern:
+- scope-shaping commands get greenfield/incremental language
+- execution/verification commands get normal/recovery language
+
+Decision: `handover` is session continuity infrastructure, not part of the product-delivery ownership model.
+Rationale: It records and restores context across Codex sessions; it should not be treated as another planner or verifier.
+Future Impact: Keep `handover.md` out of workflow-doc commits unless it is intentionally being updated as a separate continuity note.
+
+## 5. Environment & Context
+
+Repo Path:
+- `/Users/manojjoshi/Desktop/Personal/Projects/Product-Development-Workflow`
+
+Important Files:
+- `issue.md`: classification and routing for existing-codebase work
+- `sprint.md`: roadmap generation/update in greenfield or incremental mode
+- `prd.md`: epic planning in greenfield or incremental mode
+- `dev.md`: execution in normal delivery or verification recovery mode
+- `check.md`: verification in normal or recovery mode
+- `README.md`: top-level summary of the updated workflow
+- `handover.md`: session continuity only, not part of the committed workflow-doc change set
+
+Git State:
+- Commit created on `main`: `1556196` — `docs(workflow): align issue routing and command modes`
+- `handover.md` remains modified and uncommitted by design
+
+## 6. Unresolved Threads & The Wall
+
+Blocked By:
+- Nothing external.
+
+Mental Context:
+- The big conceptual cleanup is done.
+- The remaining work, if any, is now likely refinement rather than architecture:
+  - wording simplification
+  - making examples more concrete
+  - checking whether any adjacent docs beyond the core set still reference outdated flows
+- Be careful not to accidentally fold `handover.md` into a repo commit unless explicitly requested again.
+
+## 7. Immediate Next Steps (priority order)
+
+1. If requested, inspect residual docs for stale examples or contradictory references outside the core set.
+2. If the user wants to publish the workflow-doc changes, push commit `1556196` to the remote and create a PR or direct push as requested.
+3. Keep `handover.md` as a local continuity note unless the user explicitly asks to commit it.

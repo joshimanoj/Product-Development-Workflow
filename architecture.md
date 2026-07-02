@@ -150,7 +150,7 @@ Browser / OS targets: [e.g. iOS 16+, Android 12+, Chrome/Safari/Firefox latest]
 
 Unit tests: [Jest / Vitest / pytest / XCTest / etc.]
 Integration tests: [approach and tooling]
-E2E / Functional: [Playwright / Detox / XCUITest / patrol]
+E2E / Functional: [Playwright / Detox / XCUITest / patrol — used to execute the Track B functional scenarios planned in /prd]
 Coverage target: [e.g. 80% unit test coverage minimum]
 
 Mobile targets (confirmed here — used by /sprint, /prd, and CI from this point on):
@@ -167,7 +167,7 @@ Critical paths (required — run on every /check regardless of story type):
 - [Path name]: [specific test file — e.g. tests/auth/login.test.ts]
 - [Path name]: [specific test file — e.g. tests/core/[feature].test.ts]
 
-Track C tooling (required — assigned per NFR type; used by /prd to classify NFR acceptance criteria):
+Track C tooling (required — assigned per NFR type; used by /prd to classify NFR acceptance criteria and execute Track C checks separately from Track B functional scenarios):
 - Performance: [tool — e.g. k6, Lighthouse CI | test file location | pass threshold]
 - Accessibility: [tool — e.g. axe-core, pa11y | test file location | pass threshold]
 - Security: [tool — e.g. OWASP ZAP, custom sanitisation tests | test file location | pass condition]

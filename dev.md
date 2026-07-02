@@ -39,7 +39,7 @@ Within this model, `/dev` owns implementation only. Planning repairs stay in `/p
 
 Normal delivery mode:
 - follow the story-scoped `TODO.md` from top to bottom
-- write Track B and Track C tests RED first for the current story
+- write Track B and Track C tests RED first for the current story from the approved planning outputs (`task_spec_document.md`, including the QA Scenario Matrix references for Track B)
 - then execute Track A and the story/epic technical integration gates
 
 Verification recovery mode:
@@ -55,7 +55,7 @@ Verification recovery mode:
 
 > **Canonical TODO rule:** `TODO.md` is story-scoped. Each story section contains that story's Track B tasks, Track C tasks, Track A tasks, AC Integration Tests, and Story Integration Test, in that order. `/dev` identifies the current story by finding the first story section with unchecked work.
 
-> **Track ordering rule:** Within the current story section, write that story's Track B and Track C tests RED first — commit them — then begin Track A for that story. Move to the next story only after the current story's section is complete. Do not run Track B or Track C tests at any point during `/dev` — they are written RED and deferred to epic `/check`.
+> **Track ordering rule:** Within the current story section, write that story's Track B and Track C tests RED first — commit them — then begin Track A for that story. Track B specs come from the approved functional QA scenarios in `task_spec_document.md`; Track C specs come from the approved NFR plan. Move to the next story only after the current story's section is complete. Do not run Track B or Track C tests at any point during `/dev` — they are written RED and deferred to epic `/check`.
 
 > **Story done rule:** A story is complete when all its Track A tasks are `[x]`, unit tests pass, AC integration tests pass, story integration test passes, type check is clean, lint is clean, and its Track B tests are written RED and committed. Mark the "Story Done When" checklist in `TODO.md` and move to the next story.
 

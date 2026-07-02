@@ -12,6 +12,8 @@ Stories are the atomic unit of user behaviour — one thing a user can attempt i
 
 In incremental mode, `/sprint` updates `Sprint.md`, `epic-N.md`, and `story-N.md` in place. It does not regenerate unrelated epics or renumber existing stories unless the change explicitly requires it.
 
+Story refinement triggered by `/prd` is a special case of incremental mode. When `/prd` discovers missing product behaviour while designing QA scenarios, `/sprint` reopens only the affected story detail and preserves all unrelated roadmap files exactly as they are.
+
 ---
 
 ## Inputs Required
@@ -26,6 +28,8 @@ In incremental mode, `/sprint` updates `Sprint.md`, `epic-N.md`, and `story-N.md
 > **Gate:** If any document is not in Approved status, or if any blueprint file is missing for a declared platform, stop and tell the user. Do not proceed with planning against unapproved inputs.
 
 In incremental mode, also read the existing `Sprint.md` plus any affected `epic-N.md` and `story-N.md` files before planning changes.
+
+When incremental mode is entered because `/prd` found a missing requirement during QA scenario design, also read the `/prd` refinement handoff first and treat it as the source of truth for what story detail must be repaired.
 
 ---
 
@@ -138,6 +142,12 @@ In incremental mode:
 - append new story numbers after the current highest existing story number when adding new stories
 - update only the affected epic/story files unless a dependency change requires broader edits
 
+In story-refinement incremental mode:
+- preserve the affected story number and title unless the human explicitly changes them
+- refine only the missing behavioural detail surfaced by `/prd`
+- update only the affected `story-N.md` and, if needed, the AC summary in `epic-N.md`
+- never regenerate unrelated stories just to add newly discovered validation or boundary rules
+
 ```markdown
 ### Story #N: [Title]
 
@@ -165,7 +175,14 @@ Alternatives: [error states, edge cases]
 
 Functional:     [ ] [Specific measurable behaviour]
 Non-Functional: [ ] [Performance / Accessibility / Security]
-Edge Cases:     [ ] [Scenario handling]
+Edge Cases:     [ ] [Known scenario handling inputs for /prd — not the complete QA scenario design]
+
+#### Behaviour Rules & Constraints
+
+Validation / Bounds: [e.g. password must be 8-12 chars, allowed characters, max upload size]
+Error Handling: [e.g. duplicate submit blocked, invalid token message shown]
+Recovery / Persistence: [e.g. form values preserved after retry, refresh returns to saved state]
+Permissions / Roles: [e.g. admin only, owner only, guest blocked]
 
 #### Design References
 
@@ -298,6 +315,8 @@ Each epic is written to its own `epic-N.md` file (lightweight planning document)
 
 In incremental mode, these files are updated in place. Existing completed epics and stories are preserved unless the approved scope change explicitly reopens them.
 
+If `/prd` finds a QA scenario that exposes missing product intent, `/sprint` owns the repair to story-level truth. That repair should update only the affected story detail needed to make the scenario unambiguous before `/prd` resumes task planning.
+
 ### Sprint.md Format
 
 ```markdown
@@ -375,15 +394,17 @@ Lint: [command] | Type check: [command]
 5. Read `architecture.md` Sections 1, 3, 4, 5, 7, 8 for technical context.
 6. Read `Design.md` Sections 3, 4, 7 for UX and interaction context.
 7. In incremental mode, also read existing `Sprint.md` plus the affected `epic-N.md` and `story-N.md` files before editing.
-8. Identify Sprint 0 prerequisites in greenfield mode, or update them only if the new scope genuinely changes prerequisites in incremental mode.
-9. **Pass 1 — Epic decomposition:** identify or update only the affected epics. Present the changed epic list to the human and wait for confirmation before proceeding to story decomposition.
-10. **Pass 2 — Story decomposition:** for each confirmed affected epic, apply the granularity rule to enumerate every distinct user-facing behaviour as its own story. Preserve existing story numbers where possible; append new story numbers when adding new stories.
-11. For each affected story, generate or update a `story-N.md` using the template above. For every UI story, identify which blueprint screens it touches and paste the verbatim Zones table from `blueprint-[platform].md` for each of those screens directly into the story's Design References section.
-12. For each affected epic, generate or update an `epic-N.md` using the template above — after all its affected `story-N.md` files are written, so cross-story notes can be populated accurately.
-13. Mark Story Type (UI / Backend) for each affected story.
-14. Group affected epics into sprints by dependency, priority, and risk.
-15. Identify critical path at epic level and story level within affected epics.
-16. Update `Sprint.md` with the changed three-level index, sprint breakdown, and critical path. Generate `architecture-dev-summary.md` from `architecture.md` — unchanged from current behaviour.
-17. Ask:
+8. If `/prd` handed back a story refinement request, read that request first and refine only the affected story detail before doing any broader roadmap edits.
+9. Identify Sprint 0 prerequisites in greenfield mode, or update them only if the new scope genuinely changes prerequisites in incremental mode.
+10. **Pass 1 — Epic decomposition:** identify or update only the affected epics. Present the changed epic list to the human and wait for confirmation before proceeding to story decomposition.
+11. **Pass 2 — Story decomposition / refinement:** for each confirmed affected epic, apply the granularity rule to enumerate every distinct user-facing behaviour as its own story. Preserve existing story numbers where possible; append new story numbers when adding new stories. If the input is a `/prd` story-refinement request, refine only the missing behavioural detail rather than decomposing the whole epic again.
+12. For each affected story, generate or update a `story-N.md` using the template above. For every UI story, identify which blueprint screens it touches and paste the verbatim Zones table from `blueprint-[platform].md` for each of those screens directly into the story's Design References section.
+13. For each affected epic, generate or update an `epic-N.md` using the template above — after all its affected `story-N.md` files are written, so cross-story notes can be populated accurately.
+14. Mark Story Type (UI / Backend) for each affected story.
+15. Group affected epics into sprints by dependency, priority, and risk.
+16. Identify critical path at epic level and story level within affected epics.
+17. Update `Sprint.md` with the changed three-level index, sprint breakdown, and critical path. Generate `architecture-dev-summary.md` from `architecture.md` — unchanged from current behaviour.
+18. Ask:
    - greenfield mode: "Sprint plan ready with [N] epics, [M] stories across [P] sprints. Ready to run /prd on Epic #1?"
    - incremental mode: "Sprint plan updated for [affected feature/epic]. Ready to run /prd on [affected epic]?"
+   - story-refinement incremental mode: "Story refinement applied to Story #[N]. Ready to resume /prd for Epic #[X]?"

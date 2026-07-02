@@ -140,7 +140,7 @@ Any RED cross-story flow is treated as a test failure — handle in Phase 5b.
 
 All gaps and untestable criteria were resolved at `/prd` time. This phase confirms — it does not discover.
 
-For each acceptance criterion across all stories in the epic, verify it maps to a GREEN test or a declared UAT-only item. Group confirmation by story.
+For each acceptance criterion across all stories in the epic, verify it maps to a GREEN test or a declared UAT-only item. Then verify that every required QA scenario approved during `/prd` is represented by the correct verification asset and is GREEN. Group confirmation by story.
 
 ```markdown
 Epic #N — Acceptance Criteria Confirmation:
@@ -160,11 +160,20 @@ Story #[N+1]: [Title]
 
 Cross-story flows:
   [x] Flow 1: Sign up → verify email → first login — FT-X GREEN ✅
+
+Required QA scenarios:
+  [x] QS-1 (Happy path) — FT-1 GREEN ✅
+  [x] QS-2 (Error / validation) — FT-2 GREEN ✅
+  [x] QS-3 (Environmental) — FT-3 GREEN ✅
+  [x] QS-X (Cross-story) — FT-X GREEN ✅
 ```
 
 **Failure rules — apply per row:**
 - FT or TC is RED → test failure, handle in Phase 5b under "Track B functional test failure" or "Track C NFR test failure."
 - AC has no mapped Track B test, Track C test, or approved UAT-only declaration from `/prd` time → planning failure (`missing AC verification mapping`). Stop `/check`, write a Planning Defect Report, and return control to `/prd`. Do not proceed.
+- Approved QA scenario row marked `Track B` has no FT, or the FT does not represent the approved scenario → planning failure (`missing Track B scenario mapping`). Stop `/check`, write a Planning Defect Report, and return control to `/prd`. Do not proceed.
+- Required functional risk area that `/prd` explicitly approved for scenario coverage has no QA scenario row → planning failure (`missing QA scenario`). Stop `/check`, write a Planning Defect Report, and return control to `/prd`. Do not proceed.
+- Verification depends on product behaviour that was never clarified during `/prd` story refinement (for example validation bounds, allowed values, retry rules, or recovery rules) → planning failure (`missing story refinement`). Stop `/check`, write a Planning Defect Report, and return control to `/sprint` for story repair, then back to `/prd`. Do not proceed.
 - NFR AC has no TC and was not declared UAT-only at `/prd` time → planning failure (`missing Track C test`). Stop `/check`, write a Planning Defect Report, and return control to `/prd`. Do not proceed.
 
 ---
@@ -255,6 +264,7 @@ Track B functional/E2E: [N]/[N] passing (across all stories)
 Track C NFR tests: [N]/[N] passing
 Cross-story flows: [N]/[N] passing
 Acceptance audit: ✅ All criteria covered across all stories (Functional / Edge case / NFR)
+Required QA scenarios: ✅ All approved Track B scenarios represented and GREEN
 Technical regression: ✅ [N]/[N] planned targets + [N] extra deterministic dependent suites GREEN
 Functional regression: ✅ [N]/[N] planned targets GREEN
 Critical paths: ✅ [N]/[N] technical + [N]/[N] functional GREEN
@@ -312,7 +322,7 @@ Insert the task at the **top of the current story's section** in `TODO.md`, ahea
 | Technical or functional regression target failure (Phase 4) | Trace suspect Track A task(s) via manifest target overlap and changed-file impact. Write a fix task with `skip_red: true` unless a new reproduction test is needed. Return to `/dev`, fix the implementation, then re-run `/check` from Phase 1. |
 | Critical path failure (Phase 4) | Treat exactly like a regression target failure. `/check` does not re-scope the critical path at this stage. |
 | Type error or lint error | Fix inline only if the change is trivial and does not alter planned behaviour. Otherwise create a corrective task and return to `/dev`. In either case, re-run `/check` from Phase 1. |
-| Planning failure (missing Track A task, missing task unit test spec, missing task integration test spec, missing AC integration test spec, missing story integration test spec, missing epic technical integration test suite, missing Track B test, missing Track C test, missing AC verification mapping, missing technical regression target, missing functional regression target, missing critical path target, missing prerequisite implementation task) | **Do NOT fix inline. Stop `/check`.** Write a Planning Defect Report listing each missing or inconsistent planning artefact, return control to `/prd`, regenerate only the affected planning artefacts, append any new implementation work to `task_spec_document.md` and `TODO.md`, complete that work via `/dev`, then re-run `/check` from Phase 1. Preserve completed tasks exactly as they are. |
+| Planning failure (missing Track A task, missing task unit test spec, missing task integration test spec, missing AC integration test spec, missing story integration test spec, missing epic technical integration test suite, missing Track B test, missing Track C test, missing AC verification mapping, missing QA scenario, missing Track B scenario mapping, missing story refinement, missing technical regression target, missing functional regression target, missing critical path target, missing prerequisite implementation task) | **Do NOT fix inline. Stop `/check`.** If the failure is missing story refinement, return control to `/sprint` incremental mode first so story truth is repaired, then resume `/prd`. Otherwise, return control to `/prd`, regenerate only the affected planning artefacts, append any new implementation work to `task_spec_document.md` and `TODO.md`, complete that work via `/dev`, then re-run `/check` from Phase 1. Preserve completed tasks exactly as they are. |
 | Same `target_test` failing after 3 fix attempts | Trigger `/spike` — do not keep generating fix tasks for the same test. |
 
 **Rules:**
@@ -330,7 +340,7 @@ When `/check` detects a planning failure, create a report with this structure be
 ```markdown
 ## Planning Defect Report — Epic #N
 
-- Defect type: [missing Track A task | missing task unit test spec | missing task integration test spec | missing AC integration test spec | missing story integration test spec | missing epic technical integration test suite | missing Track B test | missing Track C test | missing AC verification mapping | missing technical regression target | missing functional regression target | missing critical path target | missing prerequisite implementation task]
+- Defect type: [missing Track A task | missing task unit test spec | missing task integration test spec | missing AC integration test spec | missing story integration test spec | missing epic technical integration test suite | missing Track B test | missing Track C test | missing AC verification mapping | missing QA scenario | missing Track B scenario mapping | missing story refinement | missing technical regression target | missing functional regression target | missing critical path target | missing prerequisite implementation task]
 - Story / AC / Target: [exact reference]
 - Why this blocks `/check`: [one sentence]
 - Required `/prd` repair: [artifact(s) to regenerate]

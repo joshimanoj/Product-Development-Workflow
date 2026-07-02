@@ -25,7 +25,7 @@ A complete, opinionated product development workflow built as [Claude Code](http
 | `/design` | Living UX & interaction design. Iterative prototype reviews producing a design output suite (style guide, theme, blueprints, component specs). |
 | `/architecture` | Technical foundation. Platform, stack, data models, APIs, infrastructure, testing strategy. |
 | `/sprint` | Transform `product_note.md` into a sprint roadmap with atomic user stories (`story-N.md`). Supports greenfield and incremental roadmap updates. |
-| `/prd` | Planning only. Breaks stories into atomic implementation tasks, Track B/Track C specs, verification mapping, regression manifests, and critical-path execution plans. |
+| `/prd` | Planning only. Breaks stories into atomic implementation tasks, AC classification, a QA scenario layer for Track B planning, Track B/Track C specs, verification mapping, regression manifests, and critical-path execution plans. |
 | `/dev` | Implementation only. Executes Track A, proves technical correctness with unit and technical integration tests, and writes Track B/Track C tests RED. Supports normal delivery and verification-recovery execution. |
 | `/check` | Verification gate. Runs final lint/type-check, current-epic Track B/Track C, acceptance audit, planned regression, planned critical paths, and CI. Gates `/uat` or merge. Supports normal verification and recovery routing. |
 | `/uat` | Human acceptance testing for UI stories. Manual sign-off on look, feel, and interaction before merge. |
