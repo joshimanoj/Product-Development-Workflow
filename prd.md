@@ -2,7 +2,7 @@
 
 ## Purpose
 
-For the active epic, read all its stories and break them into atomic 5–10 minute tasks. For every task produce a technical blueprint with exact file changes and test plans. Generate functional test specs (Track B) and NFR test specs (Track C) written RED upfront — these accumulate across all stories and run together at epic-level `/check`. Track B and Track C tests are never run during `/dev` — they are written RED and committed, execution is deferred to `/check`.
+For the active epic, read all its stories and break them into atomic 5–10 minute tasks. For every task produce a technical specification with public contracts, file changes, and test plans. Generate functional test specs (Track B) and NFR test specs (Track C) written RED upfront — these accumulate across all stories and run together at epic-level `/check`. Track B and Track C tests are never run during `/dev` — they are written RED and committed, execution is deferred to `/check`.
 
 ---
 
@@ -48,13 +48,13 @@ Auto-detect from project config files. Claude should apply the same detection lo
 
 **This pass happens before any tasks are written.** Read `epic-N.md` to understand the full epic scope and cross-story notes. Then read each `story-N.md` in the suggested order from `epic-N.md`. For every acceptance criterion across all stories, classify it into exactly one category. No AC may be left unclassified. If classification is unclear, resolve with the human before proceeding.
 
-| AC Type | UI story | Backend story |
-|---------|----------|---------------|
-| Functional criterion | Track B FT (one per criterion) | Track A unit/integration test (explicit — not assumed) |
-| Edge case | Track B FT (own test — never bundled with happy path) | Track A unit test (own test — never bundled) |
-| NFR — automatable | Track C (assign tool from architecture.md Section 8 Track C tooling) | Track C (same — story type is irrelevant for NFRs) |
-| NFR — E2E testable (e.g. offline, slow network) | Track B with conditions (e.g. Playwright network throttle) | Track B with conditions |
-| NFR — subjective / human judgment only | UAT-only — document reason, get human confirmation now | UAT-only — document reason, get human confirmation now |
+| AC Type | Description | Output |
+|---------|-------------|--------|
+| Functional — Happy Path | Core success behaviour | Track A + Track B FT |
+| Functional — Edge Case | Boundary / error / alternative path | Track A + Track B FT (own test — never bundled with happy path) |
+| Functional — Environmental | Network conditions, offline, slow connection, interrupted state | Track A + Track B FT (with environment conditions e.g. Playwright network throttle) |
+| Non-Functional — Tool-driven | Automatable NFR (performance, accessibility, security) | Track C (tool from architecture.md Section 8) |
+| Non-Functional — Human/UAT | Subjective / human judgment only | UAT-only — document reason, get human confirmation now |
 
 Also identify cross-story Track B tests at this stage — user journeys that span multiple stories (e.g. sign up → verify email → first login). These are additional Track B tests beyond the per-story ones, written here and run at epic CHECK.
 
@@ -64,12 +64,13 @@ Present the full classification table grouped by story, plus cross-story tests, 
 AC Classification — Epic #N:
 
 Story #1: [Title]
-  AC-1 [Functional]: "User sees confirmation on submit" → Track B FT
-  AC-2 [Edge case]: "Form rejected when email is blank" → Track B FT
-  AC-3 [NFR — automatable]: "API response < 200ms p95" → Track C (k6)
+  AC-1 [Functional — Happy Path]: "User sees confirmation on submit" → Track B FT
+  AC-2 [Functional — Edge Case]: "Form rejected when email is blank" → Track B FT
+  AC-3 [Functional — Environmental]: "Offline state shows cached data" → Track B FT (offline condition)
+  AC-4 [Non-Functional — Tool-driven]: "API response < 200ms p95" → Track C (k6)
 
 Story #2: [Title]
-  AC-4 [Functional]: "..." → Track B FT
+  AC-5 [Functional — Happy Path]: "..." → Track B FT
   ...
 
 Cross-story flows:
@@ -82,56 +83,126 @@ Human must confirm before proceeding to task generation.
 
 ---
 
-## Phase 3: Task Breakdown
+## Phase 3: Regression Planning
+
+**Before writing any tasks**, analyse the repository to identify what prior work this epic may affect.
+
+### Dependency Analysis
+
+Scan the planned file changes for this epic (derived from story-N.md and architecture.md) and identify:
+- Which files each story intends to create or modify
+- Which modules/interfaces those files export or implement
+- Which prior story and epic test suites import or depend on those modules
+
+### Technical Regression Manifest
+
+List every prior story-level and epic-level technical integration test suite that touches modules this epic plans to change.
+
+```
+Technical Regression Manifest — Epic #N:
+
+Planned file changes:
+  Story #1: auth/token.ts, auth/session.ts
+  Story #2: api/auth-client.ts
+
+Impacted prior suites:
+  - Story #3 (Epic #1) integration suite → imports AuthRepository from auth/token.ts
+  - Epic #1 integration suite → depends on AuthState from auth/session.ts
+  - Story #2 (Epic #2) integration suite → uses ApiAuthClient from api/auth-client.ts
+
+Action: /check will execute these suites as part of technical regression.
+```
+
+### Functional Regression Manifest
+
+List every prior Track B functional test that exercises flows touching modules this epic plans to change.
+
+```
+Functional Regression Manifest — Epic #N:
+
+Impacted prior Track B tests:
+  - FT-3 (Epic #1, Story #2): login flow → depends on auth/session.ts
+  - FT-7 (Epic #2, Story #1): token refresh flow → depends on auth/token.ts
+
+Action: /check will execute these tests as part of functional regression.
+```
+
+> Note: These manifests are planning-time estimates based on intended file changes. `/check` performs authoritative live reconciliation via `git diff` and may add additional targets not listed here.
+
+Present both manifests to the human for confirmation before proceeding.
+
+---
+
+## Phase 4: Task Breakdown
 
 Three tracks planned upfront across all stories in the epic. All appear in `task_spec_document.md` and `TODO.md`, sectioned by story.
 
-### Track A — Implementation Tasks
+### Story Structure
 
-Each task = one 5–10 minute Red-Green-Refactor unit.
+Each story section in `task_spec_document.md` follows this structure:
 
-```markdown
-### Task N of M: [Brief Description]
-
-Type: Feature | Refactor | Bug Fix
-
-Files:
-  Test: [path/to/test/file]
-  Implementation: [path/to/implementation/file]
-
-What to Build:
-  Add/modify: [function/class name]
-  Behavior: [what it should do]
-  Edge cases: [list]
-
-Test Requirements:
-  Input: [sample test data]
-  Expected output: [what should happen]
-  Test description: "should [do X] when [Y]"
-
-Implementation Notes:
-  [Patterns from architecture.md / dependencies / integration points]
 ```
+## Story #N: [Title]
 
-### Track B — Functional Test Tasks
+### Public Contracts
 
-For every functional criterion and edge case AC across all stories in the epic (UI and backend — see classification table above), define one functional test task. Also include cross-story flow tests identified in the Phase 2 classification pass. Written RED — committed alongside implementation, executed at epic-level `/check`. `/dev` writes them RED and moves on — it does not run them.
+[All interfaces, DTOs, events, error types, and state definitions owned by this story.
+Defined once here. ACs reference these by name.]
 
-**Hard rule: gaps are resolved at /prd time, not discovered at /check time.** Before writing any FT, apply this resolution logic:
+interface [Name] {
+  [field]: [type]
+  ...
+}
 
-- **Testable, maps cleanly to a user-facing behaviour** → write the FT, proceed.
-- **Testable but requires infrastructure that does not yet exist** (e.g. emulator, seed helpers, auth test hooks, mock server) → add a Track A prerequisite task for that infrastructure first, then write the FT.
-- **Untestable as written** (too vague, purely subjective, depends on a third party) → stop and resolve with the human right now before generating any tasks. Either sharpen the criterion into something measurable (e.g. "feels fast" → "renders within 500ms") or explicitly mark it UAT-only and document why no FT is possible.
+type [ErrorType] = [values]
 
-Do not write a stub that can never pass. Do not defer gaps to `/check` — a gap found at `/check` that was not declared here is a `/prd` failure and is logged to `HANDOVER.md` as process debt.
+// Events published
+event [EventName]: { [payload fields] }
 
-```markdown
-### Functional Test Task FT-N: [Acceptance Criterion]
+// Events consumed
+consumes [EventName] from [source]
+
+---
+
+### AC: [Name] — [Happy Path | Edge Case | Environmental]
+
+References: [ContractName, OtherContract]
+
+#### Track A
+
+**Implementation Tasks**
+
+[Atomic tasks — what to build, not how]
+
+**Unit Test Spec**
+
+Scenario: [description]
+  Given: [precondition]
+  When: [action]
+  Then: [expected result]
+  Data: [test inputs]
+  Assertions: [what to verify]
+
+**AC Integration Test Spec**
+
+Boundary: [what module/service boundary is being tested]
+Precondition: [required state]
+Input: [what is passed across the boundary]
+Expected outcome: [what should be returned/emitted]
+Failure meaning: [what a failure at this boundary indicates]
+
+#### Track B
+
+**Functional Test Spec**
 
 Criterion (from story-N.md): [exact text]
-AC type: Functional | Edge case
+AC type: Functional — [Happy Path | Edge Case | Environmental]
 Test File: e2e/[story-name]/[criterion-slug].spec.ts
 Framework: [Playwright / Detox / XCUITest / patrol]
+
+[For Environmental ACs — specify condition]:
+Environment condition: [e.g. network offline / throttled to 3G / connection interrupted mid-request]
+Setup: [how to apply the condition in the test framework]
 
 User Flow:
 1. [Navigate / open screen]
@@ -149,33 +220,129 @@ Component Behavior Tests (UI stories — ref Component Behavior Guide):
 - Animation timing via virtual clock (ms + easing from behavior spec)
 
 Initial Status: RED (expected — implementation not yet written)
+
+---
+
+### Story Integration Test Spec
+
+[Tests cross-AC boundaries within this story — verifies ACs work together correctly]
+
+Scenario: [description]
+  Boundaries tested: [AC-1 output → AC-2 input, etc.]
+  Precondition: [state required]
+  Flow: [sequence of calls/events across ACs]
+  Expected outcome: [end state]
+  Failure meaning: [what a failure here indicates about AC interaction]
+
+### Story Track B Cross-AC Test Spec
+
+[Track B tests that verify user flows spanning multiple ACs within this story]
+
+Flow: [description]
+  Spans: [AC-1, AC-2, AC-3]
+  User steps: [ordered actions]
+  Assertions: [end state verification]
+  Initial Status: RED
 ```
+
+---
+
+### Epic Technical Integration Test Suite
+
+Generated once, after all stories are planned. Covers cross-story technical interactions.
+
+```
+## Epic #N: Technical Integration Test Suite
+
+Scenario: [description]
+  Stories involved: [#1, #2, #3]
+  Boundaries tested: [Story #1 output → Story #2 input, etc.]
+  Precondition: [state required before suite runs]
+  Flow: [sequence of cross-story calls/events]
+  Expected outcome: [end state]
+  Failure meaning: [what a failure here indicates about story interaction]
+
+[Repeat per cross-story integration scenario]
+```
+
+---
+
+### Track A — Implementation Tasks
+
+Each task = one 5–10 minute Red-Green-Refactor unit. No implementation code. No class internals. Specify what to build, not how.
+
+```markdown
+### Task N of M: [Brief Description]
+
+Type: Feature | Refactor | Bug Fix
+
+Files:
+  Test: [path/to/test/file]
+  Implementation: [path/to/implementation/file]
+
+Responsibilities:
+  [What this unit is responsible for — single, clear statement]
+
+Public Contract:
+  [Reference the interface/DTO/event from the story's Public Contracts section]
+  [If this task introduces a new contract element, define it here]
+
+File Changes:
+  [File path]: [what changes — add function X, modify interface Y, create module Z]
+
+Test Specification:
+  Input: [sample test data]
+  Expected output: [what should happen]
+  Test description: "should [do X] when [Y]"
+  Scenarios: [list additional scenarios if needed]
+
+Architecture Constraints:
+  [Rules from architecture.md that apply — naming, layering, patterns, dependencies this task must not introduce]
+```
+
+### Track B — Functional Test Tasks
+
+For every functional criterion and edge case AC across all stories in the epic (UI and backend — see classification table above), define one functional test task. Also include cross-story flow tests and story cross-AC tests identified above. Written RED — committed alongside implementation, executed at epic-level `/check`. `/dev` writes them RED and moves on — it does not run them.
+
+**Hard rule: gaps are resolved at /prd time, not discovered at /check time.** Before writing any FT, apply this resolution logic:
+
+- **Testable, maps cleanly to a user-facing behaviour** → write the FT, proceed.
+- **Testable but requires infrastructure that does not yet exist** (e.g. emulator, seed helpers, auth test hooks, mock server) → add a Track A prerequisite task for that infrastructure first, then write the FT.
+- **Untestable as written** (too vague, purely subjective, depends on a third party) → stop and resolve with the human right now before generating any tasks. Either sharpen the criterion into something measurable (e.g. "feels fast" → "renders within 500ms") or explicitly mark it UAT-only and document why no FT is possible.
+
+Do not write a stub that can never pass. Do not defer gaps to `/check` — a gap found at `/check` that was not declared here is a `/prd` failure and is logged to `HANDOVER.md` as process debt.
+
+Track B tasks are grouped by AC within each story section (see Story Structure above).
 
 ### Track C — NFR Test Tasks
 
-For every NFR AC classified as automatable or E2E-testable across all stories in the epic, define one Track C test task. Written RED alongside Track B — executed at epic-level `/check`. `/dev` writes them RED and moves on — it does not run them.
+For every NFR AC classified as tool-driven across all stories in the epic, define one Track C test task. Written RED alongside Track B — executed at epic-level `/check`. `/dev` writes them RED and moves on — it does not run them.
 
 **Tooling must come from architecture.md Section 8 Track C tooling — do not invent tooling at this stage.** If the required tool is not listed in architecture.md Section 8, stop and ask the human to update architecture.md before proceeding.
+
+Track C tasks are listed flat, grouped by NFR type (not by AC), in their own section after all stories.
 
 ```markdown
 ### NFR Test Task TC-N: [NFR Criterion]
 
 Criterion (from story-N.md): [exact text]
-AC type: NFR — automatable | NFR — E2E testable
-Tool: [from architecture.md Section 8 Track C tooling — e.g. k6 / axe-core / Lighthouse CI]
-Test File: [e.g. tests/performance/story-N-load.js | e2e/story-N/offline.spec.ts]
-Run command: [exact command]
-Pass condition: [explicit, measurable threshold — e.g. p95 < 200ms | 0 axe violations | Lighthouse score ≥ 90]
+AC type: Non-Functional — Tool-driven
 
-Setup required:
-[Any Track A prerequisite tasks needed before this test can run — e.g. "seed 1000 records", "configure k6 env vars"]
+Required Tool: [from architecture.md Section 8 Track C tooling — e.g. k6 / axe-core / Lighthouse CI]
+Installation/Setup Requirements: [version, install command, config file location, env vars required]
+
+Test File: [e.g. tests/performance/story-N-load.js]
+Test Data: [specific data required — seed records, fixture files, user accounts, API payloads]
+Test Setup: [state required before test runs — e.g. "1000 seeded records", "authenticated session", "staging env"]
+Execution Command: [exact command to run]
+Pass Criteria: [explicit, measurable threshold — e.g. p95 < 200ms | 0 axe violations | Lighthouse score ≥ 90]
 
 Initial Status: RED (expected — implementation not yet written)
 ```
 
 ---
 
-## Phase 3: Completeness Reverse-Trace
+## Phase 5: Completeness Reverse-Trace
 
 After generating all tracks, Claude performs an explicit reverse-trace before presenting tasks to the user. This is a mechanical check — not a judgment call.
 
@@ -196,13 +363,21 @@ For each shared dependency touched by multiple Track A tasks:
 For each Track C task:
   → Confirm the tool named is listed in architecture.md Section 8 Track C tooling
   → If not → stop and ask the human to update architecture.md first
+
+For each AC referenced in Story Integration Test Spec:
+  → Confirm all referenced ACs have Track A tasks
+  → If not → add missing tasks
+
+For Epic Technical Integration Test Suite:
+  → Confirm all cross-story boundaries reference ACs with Track A tasks in both stories
+  → If not → add missing tasks
 ```
 
 Only present tasks to the user after the reverse-trace is clean. State explicitly: "Reverse-trace complete — all ACs mapped, no missing tasks found." or list what was added.
 
 ---
 
-## Phase 4: TODO.md — Task Ordering
+## Phase 6: TODO.md — Task Ordering
 
 One `TODO.md` covers the entire epic, sectioned by story. Track B and Track C tests are listed first within each story section — written RED by `/dev`, executed at epic CHECK. `/dev` works through stories in the order suggested by `epic-N.md` Cross-story Notes.
 
@@ -211,9 +386,11 @@ One `TODO.md` covers the entire epic, sectioned by story. Track B and Track C te
 
 ## Track B — Functional Tests (written RED per story, run at epic /check)
 
-- [ ] FT-1: [Story #1 — Functional criterion] — e2e/epic-n/story-1/criterion-1.spec.ts — 8 min
-- [ ] FT-2: [Story #1 — Edge case criterion] — e2e/epic-n/story-1/criterion-2.spec.ts — 6 min
-- [ ] FT-3: [Story #2 — Functional criterion] — e2e/epic-n/story-2/criterion-1.spec.ts — 8 min
+- [ ] FT-1: [Story #1 — AC-1 Happy Path] — e2e/epic-n/story-1/criterion-1.spec.ts — 8 min
+- [ ] FT-2: [Story #1 — AC-2 Edge Case] — e2e/epic-n/story-1/criterion-2.spec.ts — 6 min
+- [ ] FT-3: [Story #1 — AC-3 Environmental] — e2e/epic-n/story-1/criterion-3.spec.ts — 7 min
+- [ ] FT-4: [Story #1 — Cross-AC flow] — e2e/epic-n/story-1/cross-ac-flow-1.spec.ts — 8 min
+- [ ] FT-5: [Story #2 — AC-4 Happy Path] — e2e/epic-n/story-2/criterion-1.spec.ts — 8 min
 - [ ] FT-X: [Cross-story flow] — e2e/epic-n/cross-story/flow-1.spec.ts — 10 min
 
 ## Track C — NFR Tests (written RED, run at epic /check)
@@ -227,9 +404,14 @@ One `TODO.md` covers the entire epic, sectioned by story. Track B and Track C te
 - [ ] Task 1: [Description] — 8 min
 - [ ] Task 2: [Description] — 7 min
 
+### Story Integration Test
+
+- [ ] Story #[N] Integration Test Spec — written RED — 5 min
+
 ### Story Done When
 
 - [ ] Unit tests passing
+- [ ] Story integration tests written RED and committed
 - [ ] Type check clean
 - [ ] Lint clean
 - [ ] Track B tests for this story written RED and committed
@@ -240,9 +422,14 @@ One `TODO.md` covers the entire epic, sectioned by story. Track B and Track C te
 
 - [ ] Task 3: [Description] — 8 min
 
+### Story Integration Test
+
+- [ ] Story #[N+1] Integration Test Spec — written RED — 5 min
+
 ### Story Done When
 
 - [ ] Unit tests passing
+- [ ] Story integration tests written RED and committed
 - [ ] Type check clean
 - [ ] Lint clean
 - [ ] Track B tests for this story written RED and committed
@@ -250,16 +437,17 @@ One `TODO.md` covers the entire epic, sectioned by story. Track B and Track C te
 ## Epic Acceptance
 
 - [ ] All stories done
+- [ ] Epic Technical Integration Test Suite written RED and committed
 - [ ] Ready for /check
 ```
 
 ---
 
-## Phase 5: Output Files
+## Phase 7: Output Files
 
 ### task_spec_document.md
 
-One document per epic, sectioned by story. Contains all three tracks across all stories. `/dev` reads only the current story's section when implementing.
+One document per epic, sectioned by story. Contains all three tracks across all stories, plus Story Integration Test Specs, Epic Technical Integration Test Suite, and Regression Manifests. `/dev` reads only the current story's section when implementing.
 
 > **Note:** Consumed by `/dev` for task implementation. Archived in `/check` Archive phase — not here. Do not add archive logic to `/prd`.
 
@@ -372,13 +560,14 @@ Reply with: ✅ APPROVED — all items checked, ready to merge | ❌ CHANGES NEE
 3. Detect tech stack from config files. Ask user if uncertain.
 4. Verify `.github/workflows/ci.yml` exists. If missing: stop and tell the user "CI file not found — return to Sprint 0 to set it up before running /prd." If present: proceed — no changes needed.
 5. Show pre-flight summary and wait for confirmation.
-6. **Run the AC Classification Pass (Phase 2)** — read each `story-N.md` in the epic's suggested order. For every AC across all stories, classify into Functional / Edge case / NFR-automatable / NFR-E2E-testable / UAT-only. Also identify cross-story Track B flows. Present the full classification table grouped by story to the human and wait for confirmation. Resolve all UAT-only declarations now.
-7. Generate Track B — one FT per functional criterion and edge case AC across all stories, plus cross-story flows. Apply the resolution logic in the Track B section. Edge cases get their own FT — never bundled.
-8. Generate Track C — one TC per NFR AC classified as automatable or E2E-testable. Tool must come from architecture.md Section 8.
-9. Generate Track A — story by story, reading each `story-N.md` individually. For UI stories, the blueprint Zones tables are embedded in `story-N.md` Design References — use these as the authoritative screen-level specification. Extract component names, states, and token references from the embedded Zones tables as the filter for reading `ui-patterns-[platform].md`, `component-behavior-guide.md`, and `theme.json`.
-10. **Run the Completeness Reverse-Trace (Phase 3)** — verify every AC maps to at least one task, every file exists or is being created, every shared dependency has its own task, every Track C tool is in architecture.md. Add any missing tasks. State result explicitly.
-11. Write `task_spec_document.md` — one document for the epic, sectioned by story, containing all three tracks.
-12. For each UI story, generate `story-N-ui-context.md` — pull only matching entries from `Design.md §4`, `UI_Patterns.md`, Component Behavior Guide, and `theme.json`. This is the only design file `/dev` loads for that story.
-13. For UI epics, generate `epic-N-uat.md` — the UAT checklist covering all stories and cross-story flows.
-14. Write `TODO.md` — one document for the epic, sectioned by story, Track B and Track C listed at top, Track A tasks per story section.
-15. Tell user: "Tasks ready for Epic #N ([N] stories, [M] Track B tests, [P] Track C tests). Run /dev to start Story #[first]."
+6. **Run the AC Classification Pass (Phase 2)** — read each `story-N.md` in the epic's suggested order. For every AC across all stories, classify into Functional (Happy Path / Edge Case / Environmental) or Non-Functional (Tool-driven / Human/UAT). Also identify cross-story Track B flows. Present the full classification table grouped by story to the human and wait for confirmation. Resolve all UAT-only declarations now.
+7. **Run Regression Planning (Phase 3)** — analyse planned file changes per story. Generate Technical Regression Manifest and Functional Regression Manifest. Present both to the human and wait for confirmation.
+8. Generate Track B — one FT per functional AC (Happy Path, Edge Case, Environmental) across all stories, plus cross-story flows and story cross-AC flows. Apply the resolution logic in the Track B section. Edge cases and Environmental conditions each get their own FT — never bundled.
+9. Generate Track C — one TC per Non-Functional Tool-driven AC. Tool must come from architecture.md Section 8. Track C listed flat by NFR type.
+10. Generate Track A — story by story, reading each `story-N.md` individually. For each story: define Public Contracts first, then for each AC define Implementation Tasks, Unit Test Spec, and AC Integration Test Spec. After all ACs: define Story Integration Test Spec and Story Cross-AC Track B spec. After all stories: define Epic Technical Integration Test Suite. No implementation code — specifications only (Responsibilities, Public Contracts, File Changes, Test Specifications, Architecture Constraints).
+11. **Run the Completeness Reverse-Trace (Phase 5)** — verify every AC maps to at least one task, every file exists or is being created, every shared dependency has its own task, every Track C tool is in architecture.md, all integration test specs reference valid ACs. Add any missing tasks. State result explicitly.
+12. Write `task_spec_document.md` — one document for the epic, sectioned by story. Contains Public Contracts, AC-grouped Track A + Track B tasks, Story Integration Test Specs, Epic Technical Integration Test Suite, Track C section, and both Regression Manifests.
+13. For each UI story, generate `story-N-ui-context.md` — pull only matching entries from `Design.md §4`, `UI_Patterns.md`, Component Behavior Guide, and `theme.json`. This is the only design file `/dev` loads for that story.
+14. For UI epics, generate `epic-N-uat.md` — the UAT checklist covering all stories and cross-story flows.
+15. Write `TODO.md` — one document for the epic, sectioned by story, Track B and Track C listed at top, Track A tasks and Story Integration Test entry per story section, Epic Technical Integration Test Suite entry at epic acceptance.
+16. Tell user: "Tasks ready for Epic #N ([N] stories, [M] Track B tests, [P] Track C tests). Run /dev to start Story #[first]."
