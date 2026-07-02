@@ -4,6 +4,28 @@
 
 For the active epic, read all its stories and break them into atomic 5–10 minute tasks. For every task produce a technical specification with public contracts, file changes, and test plans. Generate functional test specs (Track B) and NFR test specs (Track C) written RED upfront — these accumulate across all stories and run together at epic-level `/check`. Track B and Track C tests are never run during `/dev` — they are written RED and committed, execution is deferred to `/check`.
 
+`/prd` supports two planning modes:
+- `greenfield mode` — generate the first complete implementation and verification plan for an epic
+- `incremental mode` — update an existing epic plan in place when planning scope changes or when `/check` returns a planning defect
+
+Planning Defect Intake is a special case of `/prd` incremental mode, not a separate planning model.
+
+---
+
+## Shared Workflow Model
+
+Use this shared lifecycle model consistently across `/prd`, `/dev`, and `/check`:
+
+- Normal delivery loop: `/prd` → `/dev` → `/check` → `/uat` or merge
+- Planning failure loop: `/check` → `/prd` → `/dev` if new implementation work was added → `/check`
+- Verification failure loop: `/check` → `/dev` → `/check`
+
+Command ownership in this model:
+
+- `/prd` owns planning artefacts: `task_spec_document.md`, `TODO.md`, verification mapping, and regression manifests
+- `/dev` owns implementation against the current unchecked task in `TODO.md`
+- `/check` owns verification, failure classification, and routing back to `/prd` or `/dev`
+
 ---
 
 ## Pre-Flight Check
@@ -23,6 +45,89 @@ Tech stack: [language / framework / test runner]
 ~[N] implementation tasks + [M] Track B tests + [P] Track C tests across all stories
 Proceed?
 ```
+
+---
+
+## Incremental Planning Intake
+
+Use `/prd` incremental mode whenever the epic already has planning artefacts and only part of the plan needs to change.
+
+Typical triggers:
+- `/check` produced a Planning Defect Report
+- `/issue` + `/sprint` changed or added stories inside an existing roadmap
+- an approved scope change reopens an existing epic and requires updates to `task_spec_document.md` or `TODO.md`
+
+Incremental planning rules:
+- repair or update only the named artefacts and affected sections
+- preserve completed tasks exactly as they are
+- do not regenerate unrelated stories, tests, or task sections
+- append or insert only the minimum new planning required for the changed scope
+- if verification scope changes, update Track B, Track C, manifests, and acceptance mapping together
+
+---
+
+## Planning Defect Intake
+
+This is a special-entry recovery path used only when `/check` has halted on a planning failure and produced a Planning Defect Report. It is not part of the normal epic-planning flow.
+
+### Required Inputs
+
+- **Planning Defect Report** — authored by `/check`; source of truth for what failed
+- **`task_spec_document.md`** — current epic task spec; repair in place
+- **`TODO.md`** — current epic task list; append new work in place
+- **`epic-N.md` / `story-N.md`** — only the stories referenced by the defect report
+- **`architecture.md`** — required when the defect touches Track C tooling, critical paths, technical integration suites, or regression targets
+
+### Intake Rules
+
+- Read the Planning Defect Report first, before reopening any planning phase.
+- Repair only the named artefacts and affected sections.
+- Preserve all completed tasks exactly as they are — never rewrite or reorder completed work.
+- Do not regenerate unrelated stories, tests, or task sections.
+- Append new implementation work to the existing `task_spec_document.md` and `TODO.md`; do not replace either file wholesale.
+- If the defect changes verification scope, update the relevant Track B, Track C, regression manifest, and acceptance mapping sections together so `/check` sees one consistent repair.
+- Do not silently convert a planning failure into a test-failure fix task. Missing planning artefacts stay in `/prd`; implementation gaps stay in `/dev`.
+
+### Supported Defect Types
+
+`/prd` must treat these Planning Defect Report labels as exact planning artefacts, not broad categories:
+
+- `missing Track A task`
+- `missing task unit test spec`
+- `missing task integration test spec`
+- `missing AC integration test spec`
+- `missing story integration test spec`
+- `missing epic technical integration test suite`
+- `missing Track B test`
+- `missing Track C test`
+- `missing AC verification mapping`
+- `missing technical regression target`
+- `missing functional regression target`
+- `missing prerequisite implementation task`
+
+### Repair Workflow
+
+1. Read each defect row in the Planning Defect Report and identify the blocked artefact, story, AC, or regression target.
+2. Reopen only the affected planning phase(s):
+   - `missing AC verification mapping` → revisit Phase 2 and the affected task sections
+   - `missing technical regression target` or `missing functional regression target` → revisit Phase 3
+   - `missing Track A task`, `missing task unit test spec`, `missing task integration test spec`, `missing AC integration test spec`, `missing story integration test spec`, `missing epic technical integration test suite`, `missing Track B test`, or `missing Track C test` → revisit Phase 4
+   - `missing prerequisite implementation task` → revisit Phase 4 and Phase 6 ordering
+3. Regenerate only the missing or inconsistent planning content.
+4. Re-run the completeness reverse-trace for the affected scope before making the repair final. Confirm the repaired artefact now maps cleanly into Track A, Track B, Track C, integration, and regression coverage where applicable.
+5. Append any newly required implementation tasks to `task_spec_document.md` and `TODO.md` in execution order.
+6. Hand back to `/dev` if new implementation work was added; otherwise hand back to `/check`.
+
+### Output Contract
+
+At the end of Planning Defect Intake, report:
+
+- Repaired artefacts
+- Newly added task ids, if any
+- Confirmation that completed tasks were preserved unchanged
+- Exact next step:
+  - `Planning repaired. Resume /dev for tasks [ids].`
+  - `Planning repaired. Re-run /check.`
 
 ---
 
@@ -96,7 +201,7 @@ Scan the planned file changes for this epic (derived from story-N.md and archite
 
 ### Technical Regression Manifest
 
-List every prior story-level and epic-level technical integration test suite that touches modules this epic plans to change.
+List every prior story-level and epic-level technical integration test suite that touches modules this epic plans to change. Each entry must include the exact suite identifier or test file plus the command `/check` should run. Do not leave regression targets implicit.
 
 ```
 Technical Regression Manifest — Epic #N:
@@ -107,29 +212,68 @@ Planned file changes:
 
 Impacted prior suites:
   - Story #3 (Epic #1) integration suite → imports AuthRepository from auth/token.ts
+    Command: vitest run tests/integration/epic-1/story-3-auth-repository.spec.ts
   - Epic #1 integration suite → depends on AuthState from auth/session.ts
+    Command: vitest run tests/integration/epic-1/epic-auth-flow.spec.ts
   - Story #2 (Epic #2) integration suite → uses ApiAuthClient from api/auth-client.ts
+    Command: vitest run tests/integration/epic-2/story-2-api-auth-client.spec.ts
 
 Action: /check will execute these suites as part of technical regression.
 ```
 
 ### Functional Regression Manifest
 
-List every prior Track B functional test that exercises flows touching modules this epic plans to change.
+List every prior Track B functional test that exercises flows touching modules this epic plans to change. Each entry must include the FT id, exact test file, and execution command so `/check` can run the full planned regression set deterministically.
 
 ```
 Functional Regression Manifest — Epic #N:
 
 Impacted prior Track B tests:
   - FT-3 (Epic #1, Story #2): login flow → depends on auth/session.ts
+    Test File: e2e/epic-1/story-2/login-flow.spec.ts
+    Command: npx playwright test e2e/epic-1/story-2/login-flow.spec.ts
   - FT-7 (Epic #2, Story #1): token refresh flow → depends on auth/token.ts
+    Test File: e2e/epic-2/story-1/token-refresh.spec.ts
+    Command: npx playwright test e2e/epic-2/story-1/token-refresh.spec.ts
 
 Action: /check will execute these tests as part of functional regression.
 ```
 
-> Note: These manifests are planning-time estimates based on intended file changes. `/check` performs authoritative live reconciliation via `git diff` and may add additional targets not listed here.
+### Critical Path Manifest
 
-Present both manifests to the human for confirmation before proceeding.
+Read Critical Paths from `architecture.md` Section 8 and select the entries this epic can affect. Materialize them into the epic plan so `/check` has exact execution targets without re-planning at verification time.
+
+Split the output into:
+- technical critical path suites
+- functional critical path suites
+
+Each entry must include:
+- critical path id or label from `architecture.md`
+- why this epic can affect it
+- exact test file or suite identifier
+- exact execution command
+
+```markdown
+Critical Path Manifest — Epic #N:
+
+Technical critical paths:
+  - Auth repository integration
+    Why impacted: Story #1 modifies auth/session.ts consumed by the repository boundary
+    Test File: tests/integration/auth-repository.spec.ts
+    Command: vitest run tests/integration/auth-repository.spec.ts
+
+Functional critical paths:
+  - Login happy path
+    Why impacted: Story #2 changes login error handling and token persistence
+    Test File: e2e/core/login.spec.ts
+    Command: npx playwright test e2e/core/login.spec.ts
+
+Action: /check will execute these tests as part of critical-path verification.
+```
+
+> Note: These manifests are planning-time selections based on intended file changes. `/check` consumes them as the default execution plan. `/check` may add extra deterministic dependents from the final diff as a safety net, but it does not re-decide the planned regression or critical-path set by judgment call.
+
+Present all three manifests to the human for confirmation before proceeding.
 
 ---
 
@@ -218,6 +362,19 @@ Component Behavior Tests (UI stories — ref Component Behavior Guide):
 - Snapshot per state (tokens from theme.json applied)
 - Layout at small + large screen sizes
 - Animation timing via virtual clock (ms + easing from behavior spec)
+
+Initial Status: RED (expected — implementation not yet written)
+
+#### Track C
+
+**NFR Test Spec** (include only for ACs classified as Non-Functional — Tool-driven)
+
+Criterion (from story-N.md): [exact text]
+Required Tool: [from architecture.md Section 8 Track C tooling]
+Test File: [path]
+Execution Command: [exact command]
+Pass Criteria: [explicit threshold]
+Test Setup: [data / env / server requirements]
 
 Initial Status: RED (expected — implementation not yet written)
 
@@ -310,7 +467,7 @@ For every functional criterion and edge case AC across all stories in the epic (
 - **Testable but requires infrastructure that does not yet exist** (e.g. emulator, seed helpers, auth test hooks, mock server) → add a Track A prerequisite task for that infrastructure first, then write the FT.
 - **Untestable as written** (too vague, purely subjective, depends on a third party) → stop and resolve with the human right now before generating any tasks. Either sharpen the criterion into something measurable (e.g. "feels fast" → "renders within 500ms") or explicitly mark it UAT-only and document why no FT is possible.
 
-Do not write a stub that can never pass. Do not defer gaps to `/check` — a gap found at `/check` that was not declared here is a `/prd` failure and is logged to `HANDOVER.md` as process debt.
+Do not write a stub that can never pass. Do not defer gaps to `/check` — a gap found at `/check` that was not declared here is a `/prd` planning failure. `/check` will write a Planning Defect Report, return control to `/prd`, and require regeneration of the affected planning artefacts before verification resumes.
 
 Track B tasks are grouped by AC within each story section (see Story Structure above).
 
@@ -320,7 +477,7 @@ For every NFR AC classified as tool-driven across all stories in the epic, defin
 
 **Tooling must come from architecture.md Section 8 Track C tooling — do not invent tooling at this stage.** If the required tool is not listed in architecture.md Section 8, stop and ask the human to update architecture.md before proceeding.
 
-Track C tasks are listed flat, grouped by NFR type (not by AC), in their own section after all stories.
+Track C tasks stay story-scoped in both `task_spec_document.md` and `TODO.md`. Within a story section, place each Track C task next to the AC or story area it verifies so `/dev` can write it RED before Track A for that same story.
 
 ```markdown
 ### NFR Test Task TC-N: [NFR Criterion]
@@ -349,6 +506,7 @@ After generating all tracks, Claude performs an explicit reverse-trace before pr
 ```
 For each AC in story-N.md:
   → Confirm it appears in exactly one row of the Phase 2 classification table
+  → Confirm it maps to exactly one verification outcome: Track B test, Track C test, or approved UAT-only item
   → Confirm at least one Track A, B, or C task directly enables or tests it
   → If no task maps to an AC → add the missing task before presenting
 
@@ -371,38 +529,54 @@ For each AC referenced in Story Integration Test Spec:
 For Epic Technical Integration Test Suite:
   → Confirm all cross-story boundaries reference ACs with Track A tasks in both stories
   → If not → add missing tasks
+
+For regression planning:
+  → Confirm every impacted technical regression target lists an exact suite/test file and run command
+  → Confirm every impacted functional regression target lists an FT id, exact test file, and run command
+  → Confirm every impacted critical path target lists an exact suite/test file and run command
+  → If a regression target is referenced but not executable → stop and fix the planning artefact before presenting
 ```
 
-Only present tasks to the user after the reverse-trace is clean. State explicitly: "Reverse-trace complete — all ACs mapped, no missing tasks found." or list what was added.
+Only present tasks to the user after the reverse-trace is clean. State explicitly: "Reverse-trace complete — all ACs mapped, verification coverage complete, no missing tasks found." or list what was added.
 
 ---
 
 ## Phase 6: TODO.md — Task Ordering
 
-One `TODO.md` covers the entire epic, sectioned by story. Track B and Track C tests are listed first within each story section — written RED by `/dev`, executed at epic CHECK. `/dev` works through stories in the order suggested by `epic-N.md` Cross-story Notes.
+One `TODO.md` covers the entire epic, sectioned by story. This story-scoped structure is canonical across `/prd`, `/dev`, and `/check`.
+
+Rules:
+- Each story owns its own Track B, Track C, Track A, and integration entries.
+- Within a story section, Track B and Track C tasks appear first, followed by Track A tasks, then AC Integration Tests, then Story Integration Test.
+- `/dev` identifies the current story as the first story section that still contains unchecked work.
+- `/check` inserts corrective implementation tasks at the top of the affected story section.
+- `/dev` works through stories in the order suggested by `epic-N.md` Cross-story Notes.
 
 ```markdown
 # Epic #N: [Name] | Stories: #[first]–#[last]
 
-## Track B — Functional Tests (written RED per story, run at epic /check)
+## Story #1: [Title]
+
+### Track B — Functional Tests (written RED, run at epic /check)
 
 - [ ] FT-1: [Story #1 — AC-1 Happy Path] — e2e/epic-n/story-1/criterion-1.spec.ts — 8 min
 - [ ] FT-2: [Story #1 — AC-2 Edge Case] — e2e/epic-n/story-1/criterion-2.spec.ts — 6 min
 - [ ] FT-3: [Story #1 — AC-3 Environmental] — e2e/epic-n/story-1/criterion-3.spec.ts — 7 min
 - [ ] FT-4: [Story #1 — Cross-AC flow] — e2e/epic-n/story-1/cross-ac-flow-1.spec.ts — 8 min
-- [ ] FT-5: [Story #2 — AC-4 Happy Path] — e2e/epic-n/story-2/criterion-1.spec.ts — 8 min
-- [ ] FT-X: [Cross-story flow] — e2e/epic-n/cross-story/flow-1.spec.ts — 10 min
 
-## Track C — NFR Tests (written RED, run at epic /check)
+### Track C — NFR Tests (written RED, run at epic /check)
 
-- [ ] TC-1: [NFR criterion] — tests/performance/epic-n-load.js — 5 min
-
-## Story #[N]: [Title]
+- [ ] TC-1: [Story #1 — NFR criterion] — tests/performance/story-1-load.js — 5 min
 
 ### Track A — Implementation Tasks
 
 - [ ] Task 1: [Description] — 8 min
 - [ ] Task 2: [Description] — 7 min
+
+### AC Integration Tests
+
+- [ ] AC-1 Integration Test — green gate — 5 min
+- [ ] AC-2 Integration Test — green gate — 5 min
 
 ### Story Integration Test
 
@@ -411,16 +585,30 @@ One `TODO.md` covers the entire epic, sectioned by story. Track B and Track C te
 ### Story Done When
 
 - [ ] Unit tests passing
-- [ ] Story integration tests written RED and committed
+- [ ] AC integration tests green
+- [ ] Story integration test green
 - [ ] Type check clean
 - [ ] Lint clean
 - [ ] Track B tests for this story written RED and committed
+- [ ] Track C tests for this story written RED and committed
 
-## Story #[N+1]: [Title]
+## Story #2: [Title]
+
+### Track B — Functional Tests (written RED, run at epic /check)
+
+- [ ] FT-5: [Story #2 — AC-4 Happy Path] — e2e/epic-n/story-2/criterion-1.spec.ts — 8 min
+
+### Track C — NFR Tests (written RED, run at epic /check)
+
+- [ ] TC-2: [Story #2 — NFR criterion] — tests/accessibility/story-2-a11y.spec.ts — 5 min
 
 ### Track A — Implementation Tasks
 
 - [ ] Task 3: [Description] — 8 min
+
+### AC Integration Tests
+
+- [ ] AC-4 Integration Test — green gate — 5 min
 
 ### Story Integration Test
 
@@ -429,15 +617,18 @@ One `TODO.md` covers the entire epic, sectioned by story. Track B and Track C te
 ### Story Done When
 
 - [ ] Unit tests passing
-- [ ] Story integration tests written RED and committed
+- [ ] AC integration tests green
+- [ ] Story integration test green
 - [ ] Type check clean
 - [ ] Lint clean
 - [ ] Track B tests for this story written RED and committed
+- [ ] Track C tests for this story written RED and committed
 
 ## Epic Acceptance
 
+- [ ] FT-X: [Cross-story flow] — e2e/epic-n/cross-story/flow-1.spec.ts — 10 min
 - [ ] All stories done
-- [ ] Epic Technical Integration Test Suite written RED and committed
+- [ ] Epic Technical Integration Test Suite green
 - [ ] Ready for /check
 ```
 
@@ -447,7 +638,7 @@ One `TODO.md` covers the entire epic, sectioned by story. Track B and Track C te
 
 ### task_spec_document.md
 
-One document per epic, sectioned by story. Contains all three tracks across all stories, plus Story Integration Test Specs, Epic Technical Integration Test Suite, and Regression Manifests. `/dev` reads only the current story's section when implementing.
+One document per epic, sectioned by story. Contains all three tracks across all stories, plus Story Integration Test Specs, Epic Technical Integration Test Suite, and the Technical Regression, Functional Regression, and Critical Path manifests. `/dev` reads only the current story's section when implementing.
 
 > **Note:** Consumed by `/dev` for task implementation. Archived in `/check` Archive phase — not here. Do not add archive logic to `/prd`.
 
@@ -546,6 +737,11 @@ Reply with: ✅ APPROVED — all items checked, ready to merge | ❌ CHANGES NEE
 
 ## Claude Instructions for /prd
 
+**Two entry modes exist:**
+
+- **Normal mode** — no Planning Defect Report is present. Run the standard epic-planning flow below.
+- **Planning Defect mode** — a Planning Defect Report is present from `/check`. Consume it first, repair only the referenced artefacts, re-run reverse-trace for the affected scope, update `task_spec_document.md` and `TODO.md` in place, then return either to `/dev` or `/check` based on whether new implementation work was added.
+
 0. **Branch check — must be the very first action, before reading any other file:**
    - **Step 0a:** Run `git branch --show-current` AND read `Sprint.md` in parallel.
    - **Step 0b:** Derive the expected branch name from the active epic:
@@ -554,6 +750,14 @@ Reply with: ✅ APPROVED — all items checked, ready to merge | ❌ CHANGES NEE
    - **Step 0c:** If already on the correct branch → proceed. If on any other branch: run `git checkout main && git pull && git checkout -b feature/epic-N-{slug}` and tell the user: "Switched to feature/epic-N-{slug} off main."
    - Never create the branch silently — always report the branch name to the user.
    - **Only after the branch is confirmed/created**, proceed to read epic and story files.
+
+0d. **Planning Defect mode check — run immediately after branch confirmation:**
+   - If a Planning Defect Report is present: read it first, identify only the affected artefacts, and enter Planning Defect Intake mode.
+   - In Planning Defect Intake mode: do not re-plan the full epic unless the defect explicitly requires it.
+   - Repair the referenced planning artefacts in place, re-run reverse-trace for the affected scope, and preserve completed tasks exactly as they are.
+   - If new implementation work is created, append it to `task_spec_document.md` and `TODO.md` in execution order and tell the user: "Planning repaired. Resume /dev for tasks [ids]."
+   - If no new implementation work is required, tell the user: "Planning repaired. Re-run /check."
+   - Never convert a planning defect into a `/dev` fix task unless the repaired planning artefacts genuinely add new implementation work.
 
 1. Read `epic-N.md` — story list, AC summaries, cross-story notes, suggested story order. This is the planning context for the whole epic. (`Sprint.md` was already read in step 0a — no need to re-read.)
 2. Read `architecture.md` (patterns, naming conventions, tech stack, Section 8 Critical Paths + Track C tooling).
@@ -569,5 +773,5 @@ Reply with: ✅ APPROVED — all items checked, ready to merge | ❌ CHANGES NEE
 12. Write `task_spec_document.md` — one document for the epic, sectioned by story. Contains Public Contracts, AC-grouped Track A + Track B tasks, Story Integration Test Specs, Epic Technical Integration Test Suite, Track C section, and both Regression Manifests.
 13. For each UI story, generate `story-N-ui-context.md` — pull only matching entries from `Design.md §4`, `UI_Patterns.md`, Component Behavior Guide, and `theme.json`. This is the only design file `/dev` loads for that story.
 14. For UI epics, generate `epic-N-uat.md` — the UAT checklist covering all stories and cross-story flows.
-15. Write `TODO.md` — one document for the epic, sectioned by story, Track B and Track C listed at top, Track A tasks and Story Integration Test entry per story section, Epic Technical Integration Test Suite entry at epic acceptance.
+15. Write `TODO.md` — one document for the epic, sectioned by story. Within each story section, list Track B, then Track C, then Track A, then AC Integration Tests, then Story Integration Test. Keep cross-story flows and epic acceptance items in `Epic Acceptance`.
 16. Tell user: "Tasks ready for Epic #N ([N] stories, [M] Track B tests, [P] Track C tests). Run /dev to start Story #[first]."

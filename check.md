@@ -2,7 +2,29 @@
 
 ## Purpose
 
-Run all automated checks for the completed epic — unit tests, integration tests, Track B functional/E2E tests, Track C NFR tests, cross-story integration flows, type checking, linting, and regression checks. `/check` does not verify visual correctness — that is the responsibility of `/uat`. Run after all stories in the epic are complete and `/dev` has confirmed all stories done.
+Verify that the completed epic satisfies requirements and does not regress existing behaviour. `/check` runs the current epic's Track B functional tests, cross-story Track B flows, Track C NFR tests, acceptance audit, planned regression targets, planned critical path tests, one final type-check/lint safety gate, and CI handoff. `/check` does not redo `/dev`'s normal unit-test and current-epic technical integration proof, and it does not verify visual correctness — that is the responsibility of `/uat`. Run after `/dev` has completed all stories and the Epic Technical Integration Test Suite is GREEN.
+
+`/check` supports two verification modes:
+- `normal verification mode` — verify a completed epic locally, then push to CI
+- `recovery mode` — classify a failure, route it to `/prd` or `/dev`, and restart verification from Phase 1 after the repair
+
+`/check` does not invent new product scope or implementation plans. It verifies, classifies failures, and routes work back to the correct owner.
+
+---
+
+## Shared Workflow Model
+
+Use this shared lifecycle model consistently across `/prd`, `/dev`, and `/check`:
+
+- Normal delivery loop: `/prd` → `/dev` → `/check` → `/uat` or merge
+- Planning failure loop: `/check` → `/prd` → `/dev` if new implementation work was added → `/check`
+- Verification failure loop: `/check` → `/dev` → `/check`
+
+Within this model, `/check` owns verification and failure classification:
+
+- planning artefact failures return to `/prd`
+- implementation or verification failures return to `/dev`
+- CI runs only after local verification is green
 
 ---
 
@@ -16,47 +38,33 @@ Run all automated checks for the completed epic — unit tests, integration test
 
 ## Repo Setup
 
-The GitHub repo must already exist — it is set up in Sprint 0, not here. Claude verifies the remote is configured and the epic feature branch is pushed. If the remote is missing, stop and tell the user: "No remote configured. Return to Sprint 0 to create the repo before running /check."
+The GitHub repo must already exist — it is set up in Sprint 0, not here. Claude verifies the remote is configured and the CI file exists. If the remote is missing, stop and tell the user: "No remote configured. Return to Sprint 0 to create the repo before running /check."
 
 ```bash
-# Verify remote and push epic feature branch
+# Verify remote
 git remote -v          # must show origin — if not, return to Sprint 0
-git push origin feature/epic-N-{slug}
 
 # Confirm CI file exists (set up in Sprint 0)
 ls .github/workflows/ci.yml
-git remote -v
 ```
 
 ---
 
-## Phase 1: Test Suite
+## Phase 1: Final Local Safety Gate
 
-### A. Affected Unit Tests (Local)
+Run one lightweight local safety gate before requirement verification begins. `/dev` already proved unit tests, AC integration tests, story integration tests, and the current epic's technical integration suite.
 
-Run unit tests for all files changed across all stories in the epic — not just the last story.
+### A. Type Safety
 
-```bash
-vitest related --run [all changed files across epic]
-# or
-pytest --testpaths [affected]
-# or
-go test ./[affected]/...
-# or
-cargo test [affected]
-# or
-flutter test [affected file]
-```
-
-Expected: All affected tests ✅. Any failure must be fixed before proceeding. The full suite across all epics runs in CI (Phase 6) — not repeated in full locally.
-
-### B. Type Safety
+Execute one final compile/type check for the epic.
 
 ```bash
 tsc --noEmit | mypy . | go build | cargo check | dart analyze
 ```
 
-### C. Linting
+### B. Linting
+
+Execute one final lint pass for the epic.
 
 ```bash
 npm run lint | flake8 | golangci-lint | cargo clippy | swiftlint | ktlint
@@ -64,7 +72,9 @@ npm run lint | flake8 | golangci-lint | cargo clippy | swiftlint | ktlint
 
 ---
 
-## Phase 2a: Track B — Functional Test Suite
+## Phase 2: Current-Epic Requirement Verification
+
+### Phase 2a: Track B — Functional Test Suite
 
 Run all Track B functional tests accumulated across all stories in the epic — per-story tests plus cross-story flow tests. All must be GREEN before proceeding. This is the first time these tests execute — they were written RED during `/dev` and deferred to here.
 
@@ -77,7 +87,7 @@ flutter drive --target=test_driver/app.dart     # Flutter
 
 ---
 
-## Phase 2b: Track C — NFR Test Suite
+### Phase 2b: Track C — NFR Test Suite
 
 Run all Track C NFR tests written during `/prd`. All must be GREEN before proceeding. Commands and pass conditions come from the TC tasks in `task_spec_document.md`. This is the first time these tests execute — deferred from `/dev`.
 
@@ -105,7 +115,7 @@ which [tool] || command -v [tool]   # system tools (k6, lighthouse)
 
 ---
 
-## Phase 2c: Cross-Story Integration Flows
+### Phase 2c: Cross-Story Integration Flows
 
 Run the cross-story Track B tests specifically and confirm they exercise transitions between stories correctly. These are the journeys that could not be tested at story level — e.g. sign up → verify email → first login as a single end-to-end flow.
 
@@ -126,7 +136,7 @@ Any RED cross-story flow is treated as a test failure — handle in Phase 5b.
 
 ---
 
-## Phase 3: Acceptance Criteria Check
+## Phase 3: Acceptance Audit
 
 All gaps and untestable criteria were resolved at `/prd` time. This phase confirms — it does not discover.
 
@@ -154,24 +164,68 @@ Cross-story flows:
 
 **Failure rules — apply per row:**
 - FT or TC is RED → test failure, handle in Phase 5b under "Track B functional test failure" or "Track C NFR test failure."
-- AC has no mapped test and was not declared UAT-only at `/prd` time → `/prd` process failure — log to `HANDOVER.md` as process debt and proceed. Do not write new tests here.
-- NFR AC has no TC and was not declared UAT-only or E2E-testable at `/prd` time → `/prd` process failure — log to `HANDOVER.md` as process debt and proceed.
+- AC has no mapped Track B test, Track C test, or approved UAT-only declaration from `/prd` time → planning failure (`missing AC verification mapping`). Stop `/check`, write a Planning Defect Report, and return control to `/prd`. Do not proceed.
+- NFR AC has no TC and was not declared UAT-only at `/prd` time → planning failure (`missing Track C test`). Stop `/check`, write a Planning Defect Report, and return control to `/prd`. Do not proceed.
 
 ---
 
-## Phase 4: Regression Check
+## Phase 4: Regression And Critical Paths
 
 Deterministic — no judgment calls. Four steps, run in order.
 
-**Step 1 — Get the exact change set:**
+**Step 1 — Execute planned technical regression targets from `/prd`:**
+
+Read the Technical Regression Manifest from `task_spec_document.md` and run every listed suite exactly as planned before doing any live reconciliation. Report each target explicitly:
+
+```markdown
+Technical regression target: Story #3 (Epic #1) integration suite
+Command: vitest run tests/integration/epic-1/story-3-auth-repository.spec.ts
+Result: ✅
+```
+
+If the manifest is missing, incomplete, or names a suite without an executable command, that is a planning failure (`missing technical regression target` or `missing epic technical integration test suite`, depending on the missing artefact). Stop, write a Planning Defect Report, and return control to `/prd`.
+
+**Step 2 — Execute planned functional regression targets from `/prd`:**
+
+Read the Functional Regression Manifest from `task_spec_document.md` and run every listed Track B regression target exactly as planned.
+
+```markdown
+Functional regression target: FT-3 (Epic #1, Story #2)
+Command: npx playwright test e2e/epic-1/story-2/login-flow.spec.ts
+Result: ✅
+```
+
+If the manifest is missing, incomplete, or names an FT without an executable command, that is a planning failure (`missing functional regression target` or `missing Track B test`, depending on the missing artefact). Stop, write a Planning Defect Report, and return control to `/prd`.
+
+**Step 3 — Execute planned critical path targets from `/prd`:**
+
+Read the Critical Path Manifest from `task_spec_document.md` and run every listed technical critical path suite and functional critical path test exactly as planned.
+
+```markdown
+Technical critical path: Auth repository integration
+Command: vitest run tests/integration/auth-repository.spec.ts
+Result: ✅
+
+Functional critical path: Login happy path
+Command: npx playwright test e2e/core/login.spec.ts
+Result: ✅
+```
+
+If the manifest is missing, incomplete, or names a critical-path target without an executable command, that is a planning failure. Stop, write a Planning Defect Report, and return control to `/prd`.
+
+**Step 4 — Get the exact change set and reconcile additional deterministic dependents:**
 ```bash
 git diff main...$(git branch --show-current) --name-only
 ```
 This is the ground truth across all stories in the epic. Every file that changed is in this list.
 
-**Step 2 — Trace dependents and run their test suites:**
+For each file in the diff, identify every other module that imports or depends on it, then run those modules' test suites. This live pass may add deterministic coverage beyond what `/prd` predicted, but it does not replace `/prd`'s planning responsibilities and it does not invent a new regression plan by judgment call.
 
-For each file in the diff, identify every other module that imports or depends on it, then run those modules' test suites. Report explicitly:
+Decision rule:
+- If the dependent suite is an additional executable target implied directly by the final diff, run it and report it as extra deterministic coverage.
+- If the diff shows that the planned manifests were conceptually missing required coverage, classify that as a planning failure and return to `/prd`.
+
+Report explicitly:
 
 ```markdown
 File changed: src/services/auth/tokenService.ts
@@ -182,22 +236,7 @@ Result: ✅ 6/6 passing
 
 If a changed file has no dependents outside its own module, state that explicitly — do not skip silently.
 
-**Step 3 — Run critical path tests:**
-
-Read Critical Paths from `architecture.md` Section 8. Run each named test file exactly as listed. No interpretation — run the file, report the result.
-
-```bash
-# Example — actual paths come from architecture.md Section 8
-vitest run tests/auth/login.test.ts
-vitest run tests/core/[feature].test.ts
-```
-
-```markdown
-Critical path: Auth flow — tests/auth/login.test.ts ✅
-Critical path: [Core feature] — tests/core/[feature].test.ts ✅
-```
-
-**Step 4 — Cross-check story-change-log.md:**
+**Cross-check story-change-log.md:**
 
 Read `story-change-log.md` entries for all stories in this epic. For any deviation that touched a file not in the `git diff` output, flag it: "story-change-log.md records a change to [file] but it does not appear in git diff — verify this file was committed."
 
@@ -205,19 +244,20 @@ Read `story-change-log.md` entries for all stories in this epic. For any deviati
 
 ## Phase 5: Local Summary
 
-Create a verification report. If anything is ❌ — STOP, fix, re-run `/check` from the failed phase.
+Create a verification report. If anything is ❌ — STOP, classify the failure, route it correctly, and re-run `/check` from Phase 1 after the fix.
 
 ```markdown
 ## Epic #N — /check Report
 
-Unit tests: [N]/[N] passing
+Final type checking: ✅ No errors
+Final linting: ✅ No errors
 Track B functional/E2E: [N]/[N] passing (across all stories)
 Track C NFR tests: [N]/[N] passing
 Cross-story flows: [N]/[N] passing
-Type checking: ✅ No errors
-Linting: ✅ No errors
 Acceptance audit: ✅ All criteria covered across all stories (Functional / Edge case / NFR)
-Regression: ✅ [N] dependent modules tested, [N] critical paths GREEN
+Technical regression: ✅ [N]/[N] planned targets + [N] extra deterministic dependent suites GREEN
+Functional regression: ✅ [N]/[N] planned targets GREEN
+Critical paths: ✅ [N]/[N] technical + [N]/[N] functional GREEN
 
 Ready for: /uat (UI epic) | Merge (Backend epic)
 ```
@@ -228,6 +268,29 @@ Ready for: /uat (UI epic) | Merge (Backend epic)
 
 Only reached if Phase 5 Local Summary has one or more ❌ items. Do not proceed to Phase 6 until all items below are resolved and `/check` re-runs clean from Phase 1.
 
+This section is `/check` recovery mode. Use it only after a concrete verification or planning failure has been observed during the normal verification run.
+
+### Verification Failure Loop
+
+Verification failures loop through `/dev` by way of `TODO.md`. The handoff is deterministic:
+
+1. `/check` identifies the failing verification target and the most likely owning Track A task.
+2. `/check` writes one or more corrective implementation tasks into `TODO.md` at the top of the current story section.
+3. Control returns to `/dev`.
+4. `/dev` reads `TODO.md` Step 0 and picks the newly inserted fix task first.
+5. `/dev` implements the fix, commits it, and preserves all previously completed tasks unchanged.
+6. Control returns to `/check`.
+7. `/check` re-runs from Phase 1 — never from the middle of the failed phase.
+
+Use this loop for verification failures only:
+- Track B functional failures
+- Track C NFR failures
+- regression target failures
+- critical path failures
+- type or lint failures if they require implementation work rather than a trivial inline correction
+
+Do not use this loop for planning failures. Planning failures return to `/prd`, not `/dev`.
+
 ### Fix Task Schema
 
 When any of the three test-failure rows below fires, `/check` writes a new task into `TODO.md` — not a vague "add a fix task" note, but an object with these fields:
@@ -235,21 +298,21 @@ When any of the three test-failure rows below fires, `/check` writes a new task 
 | Field | Meaning |
 |-------|---------|
 | `target_test` | The failing test's id (e.g. unit test name, `FT-7`, `TC-2`) |
-| `suspect_task_id` | The Track A task most likely responsible — found via file/flow overlap with `task_spec_document.md` (reuse the same dependent-tracing logic as Phase 4 Step 2) |
+| `suspect_task_id` | The Track A task most likely responsible — found via file/flow overlap with `task_spec_document.md` |
 | `raw_failure_output` | The actual assertion diff / stack trace, verbatim — not paraphrased |
 | `allowed_files` | Implementation/config files this fix may touch. Never includes the test file itself, its assertions, or (for Track C) its declared threshold |
-| `skip_red` | `true` for Track B/C failures (the test already exists and is already failing for the first time) — `false` or omitted for unit test regressions (a new reproduction test must be written) |
+| `skip_red` | `true` for Track B/C, regression, and critical-path failures when the failing test already exists — `false` or omitted only when a fresh reproduction test is genuinely required |
 
 Insert the task at the **top of the current story's section** in `TODO.md`, ahead of any unstarted Track A work, so `/dev`'s Step 0 "first unchecked task" logic picks it up first.
 
 | Failure Type | Action |
 |-------------|--------|
-| Unit test regression (Phase 1A) | Trace the broken test to its owning Track A task via `task_spec_document.md` file paths → `suspect_task_id`. Write a fix task with `skip_red: false`. Return to `/dev` — it writes a new reproduction test (Step 1 RED), then Red-Green-Refactor as normal. Commit, then re-run `/check` from Phase 1. |
 | Track B functional test failure — first execution (Phase 2a / 2c) | Trace suspect Track A task(s) via file/flow overlap with the FT's User Flow steps → `suspect_task_id`. Write a fix task with `skip_red: true`, `target_test` = the FT id. Return to `/dev` — it skips RED (the test already exists and is already failing) and goes straight to GREEN against the existing FT, then refactors. Commit, then re-run `/check` from Phase 1. |
 | Track C NFR test failure — first execution (Phase 2b) | Only after the Phase 2b tool/server/env-var resolution table has ruled out an environment cause. If the implementation or config genuinely doesn't meet the threshold: trace suspect Track A task(s) the same way, write a fix task with `skip_red: true`, `target_test` = the TC id. Return to `/dev` — it fixes the implementation/config until the TC's declared threshold passes. Commit, then re-run `/check` from Phase 1. Do not change the pass threshold to make the test pass — that defeats the gate. |
-| Type error or lint error | Fix inline without a full `/dev` cycle. Re-run Safety Gate (lint + type check), then re-run `/check` from Phase 2a. |
-| Acceptance criteria gap — small (missing assertion, wrong test setup, one-line fix) | Return to `/dev` — add the fix as a new Track B or Track C task in `TODO.md` (same schema as above), fix Red-Green-Refactor, commit, then re-run `/check` from Phase 1. |
-| Acceptance criteria gap — large (requires new infrastructure, new `/prd` + `/dev` cycle, or affects multiple stories) | **Do NOT fix inline. Stop `/check`.** Create a new story in `sprint.md` for the gap. The new story gets its own `/prd` → `/dev` → `/check` cycle. The current story proceeds to `/uat` or merge without the gap — document it in `HANDOVER.md` as known debt. Never rewrite FTs or TCs to make them pass — that defeats the gate. |
+| Technical or functional regression target failure (Phase 4) | Trace suspect Track A task(s) via manifest target overlap and changed-file impact. Write a fix task with `skip_red: true` unless a new reproduction test is needed. Return to `/dev`, fix the implementation, then re-run `/check` from Phase 1. |
+| Critical path failure (Phase 4) | Treat exactly like a regression target failure. `/check` does not re-scope the critical path at this stage. |
+| Type error or lint error | Fix inline only if the change is trivial and does not alter planned behaviour. Otherwise create a corrective task and return to `/dev`. In either case, re-run `/check` from Phase 1. |
+| Planning failure (missing Track A task, missing task unit test spec, missing task integration test spec, missing AC integration test spec, missing story integration test spec, missing epic technical integration test suite, missing Track B test, missing Track C test, missing AC verification mapping, missing technical regression target, missing functional regression target, missing critical path target, missing prerequisite implementation task) | **Do NOT fix inline. Stop `/check`.** Write a Planning Defect Report listing each missing or inconsistent planning artefact, return control to `/prd`, regenerate only the affected planning artefacts, append any new implementation work to `task_spec_document.md` and `TODO.md`, complete that work via `/dev`, then re-run `/check` from Phase 1. Preserve completed tasks exactly as they are. |
 | Same `target_test` failing after 3 fix attempts | Trigger `/spike` — do not keep generating fix tasks for the same test. |
 
 **Rules:**
@@ -257,6 +320,24 @@ Insert the task at the **top of the current story's section** in `TODO.md`, ahea
 - After the fix is committed, always re-run `/check` from Phase 1 — not from the phase that failed.
 - Do not push to CI until local `/check` is fully green.
 - Track B and Track C failures here are expected to be first-run failures — they were written RED during `/dev` and have never executed before. Treat them as implementation gaps, not test infrastructure problems, unless the test itself is clearly misconfigured.
+- `/check` may extend coverage only by deterministic reconciliation from the final diff. It does not decide "what is worth testing" by open-ended judgment.
+- Planning failures never skip ahead to regression, UAT, or CI. `/check` halts immediately until `/prd` and any resulting `/dev` work are complete.
+
+### Planning Defect Report
+
+When `/check` detects a planning failure, create a report with this structure before returning control to `/prd`:
+
+```markdown
+## Planning Defect Report — Epic #N
+
+- Defect type: [missing Track A task | missing task unit test spec | missing task integration test spec | missing AC integration test spec | missing story integration test spec | missing epic technical integration test suite | missing Track B test | missing Track C test | missing AC verification mapping | missing technical regression target | missing functional regression target | missing critical path target | missing prerequisite implementation task]
+- Story / AC / Target: [exact reference]
+- Why this blocks `/check`: [one sentence]
+- Required `/prd` repair: [artifact(s) to regenerate]
+- Follow-on `/dev` work required: [new task ids or "none yet — regenerate first"]
+```
+
+Repeat the five-line defect block once per planning defect. Do not collapse unrelated defects into one generic row.
 
 ---
 
@@ -330,7 +411,7 @@ echo "# Ready for next epic" > TODO.md
 | CI — Track B (web-playwright) | Feature branch push only | All functional/E2E tests (web) |
 | CI — Track B (mobile-e2e) | Feature branch push only (mobile) | Full mobile E2E suite |
 | CI — Track C (k6 / Lighthouse / axe) | Feature branch push only | Performance, accessibility, NFR thresholds |
-| /check | After all stories in epic done | Unit tests + Track B + Track C + cross-story flows + regression |
+| /check | After all stories in epic done | Final lint/type-check + Track B + Track C + cross-story flows + regression + critical paths |
 | /uat | UI epics before merge | Human: look, feel, interaction sign-off across all stories |
 | Post-merge CI (main) | After UAT squash merge | Track A only — confirms merge didn't break main |
 | Mac notification | When Claude stops | Never miss a prompt while stepping away |

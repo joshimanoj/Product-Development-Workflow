@@ -2,7 +2,7 @@
 
 ## Purpose
 
-The `/issue` commands are the entry point for all new work in an existing codebase built with this workflow. The human classifies the issue type upfront — Claude owns the full execution chain from that point, including all artifact checks, pre-flight gates, and downstream command invocations. The human's only inputs after the initial command are the approval gates already defined in those downstream commands.
+The `/issue` commands are the entry point for all new work in an existing codebase built with this workflow. `/issue` is responsible for classifying the work first, then routing it into the correct downstream planning and delivery path. Claude owns the full execution chain from that point, including artifact checks, pre-flight gates, and downstream command invocations. The human's only inputs after the initial command are the approval gates already defined in those downstream commands.
 
 ---
 
@@ -15,20 +15,46 @@ The `/issue` commands are the entry point for all new work in an existing codeba
 /issue-feature     "description"
 ```
 
-The type is declared by the human. Claude does not infer or reclassify it — but will surface a mismatch if the description conflicts with the declared type (see Mismatch Detection below).
+The command name is the human's initial signal, but `/issue` still performs a classification pass and surfaces a mismatch if the description conflicts with the declared type.
 
 ---
 
-## Issue Type Definitions
+## Classification First
 
-| Type | User-facing change? | Needs story? | Entry point |
+Before entering any type-specific flow, `/issue` must classify the work into one of these three delivery shapes:
+
+1. `new feature`
+2. `improvement to existing feature`
+3. `bug fix`
+
+Claude proposes the classification using the rules below, then asks for confirmation only if the case is ambiguous or conflicts with the invoked command.
+
+| Classification | Meaning | Routing Shape |
+|------|-------------------|--------------|
+| New feature | A new user capability, workflow, or outcome the product could not do before | architecture/design check → `/sprint` incremental → `/prd` → `/dev` → `/check` → `/uat` if UI |
+| Improvement to existing feature | Existing capability remains the same in purpose, but UX, content, speed, behavior, or scope improves | architecture/design check → usually `/sprint` incremental → `/prd` → `/dev` → `/check` → `/uat` if UI |
+| Bug fix | Restores intended behavior that already exists in story/design/spec history | locate affected story/spec → reopen planning context → `/prd` incremental → `/dev` → `/check` → `/uat` if UI |
+
+### Classification Rules
+
+- If the request introduces a capability the product could not previously perform → `new feature`
+- If the request changes or improves an existing capability without changing its core purpose → `improvement to existing feature`
+- If the request restores expected behavior that was already intended and documented → `bug fix`
+
+`/dev` is not the classification surface for user-facing bug fixes. `/issue` must attach every bug fix to the appropriate story and planning context before handing work to `/dev`.
+
+---
+
+## Command Declarations
+
+| Command | Typical classification | User-facing change? | Needs story? | Entry point after classification |
 |------|-------------------|--------------|-------------|
-| Task | No — internal work only (refactor, dependency upgrade, config, test coverage) | No | `/dev` |
-| Bug fix | Restores intended behaviour — user notices it was broken | Yes — reopen existing story | `/prd` |
-| Improvement | Changes something the user experiences (label, error message, speed, empty state) | Yes — new or existing story | `/prd` |
-| Feature | New capability not previously in scope | Yes — new stories via `/sprint` | `/sprint` |
+| `/issue-task` | Internal task | No | No | `/dev` |
+| `/issue-bugfix` | Bug fix | Usually yes | Yes — reopen existing story | `/prd` incremental |
+| `/issue-improvement` | Improvement to existing feature | Yes | Yes — existing story or new story in existing roadmap | usually `/sprint` incremental, then `/prd` |
+| `/issue-feature` | New feature | Yes | Yes — new epics/stories in existing roadmap | `/sprint` incremental, then `/prd` |
 
-**Mismatch Detection:** If the description implies a user-facing change but the type is `task`, or implies new scope but the type is `bugfix`, Claude flags it before proceeding: "You've declared this a [type] but the description suggests [alternative type]. Confirm type before I continue."
+**Mismatch Detection:** If the description implies a different classification than the invoked command, Claude flags it before proceeding: "You've invoked [command], but this looks like [classification]. Confirm before I continue."
 
 ---
 
@@ -52,7 +78,7 @@ Before any type-specific steps, Claude always:
 1. Pre-flight (HANDOVER.md + architecture-dev-summary.md + Sprint.md)
 2. Architecture impact check
 3. Write task spec → add to TODO.md
-4. /dev → /review → /check
+4. /dev → /check
 ```
 
 ### Step-by-Step
@@ -82,7 +108,7 @@ Add a single entry to `TODO.md`:
 ```
 
 **Step 3 — Execute:**
-Run `/dev` → `/review` → `/check`.
+Run `/dev` → `/check`.
 
 **Step 4 — Handover:**
 After `/check` passes, Claude updates `HANDOVER.md` checkpoint and `Sprint.md` as usual.
@@ -102,7 +128,7 @@ After `/check` passes, Claude updates `HANDOVER.md` checkpoint and `Sprint.md` a
 4. Architecture impact check
 5. [If UI] Design spec currency check
 6. Update story-N.md AC in place + log to bugs.md + reopen in Sprint.md
-7. /prd → /dev → /review → /check → [if UI] /uat
+7. /prd (incremental) → /dev → /check → [if UI] /uat
 ```
 
 ### Step-by-Step
@@ -167,7 +193,7 @@ Resolved: [filled in after /check passes]
 Change the story's status from `✅` (or current status) to `🔄 Reopened — Bug #N`.
 
 **Step 6 — Execute:**
-Run `/prd` → `/dev` → `/review` → `/check` → `/uat` if UI or Combination type.
+Run `/prd` in incremental mode → `/dev` → `/check` → `/uat` if UI or Combination type.
 
 **Step 7 — Close the bug:**
 After `/check` passes (and `/uat` if UI), update `bugs.md`:
@@ -193,16 +219,18 @@ If a new UI element or interaction pattern is required that does not exist in `D
 3. Confirm UI or Backend
 4. Architecture impact check
 5. [If UI] Design spec currency check + new pattern check
-6. Write or update story-N.md + add to Sprint.md
-7. /prd → /dev → /review → /check → [if UI] /uat
+6. Update product/design scope only as needed, then run `/sprint` in incremental mode to update the affected epic/story set
+7. `/prd` (greenfield for new epic, incremental for changed existing epic) → `/dev` → `/check` → [if UI] `/uat`
 ```
 
 ### Step-by-Step
 
-**Step 1 — Identify affected story:**
-Claude matches the improvement to the most likely existing `story-N.md`. Presents: "This improvement relates to Story #N: [name]. I'll update that story. Confirm?"
+**Step 1 — Identify affected scope:**
+Claude matches the improvement to the most likely existing feature, epic, and story set. Presents either:
+- "This improvement relates to Story #N: [name]. I'll update that story path."
+- "This improvement extends Feature/Epic [name] and needs one or more new stories in the existing roadmap."
 
-If the improvement spans multiple stories or is sufficiently distinct, Claude creates a new `story-N.md` instead. It tells the human which it's doing and why.
+If the improvement spans multiple stories or is sufficiently distinct, Claude expands the scope through `/sprint` incremental mode instead of directly hand-authoring only one story file.
 
 **Step 2 — Confirm type:**
 Claude states: "This improvement affects [UI / Backend / both]. Confirm?"
@@ -221,8 +249,16 @@ Does this improvement require changes to data models, API contracts, or architec
 - If follows existing pattern → proceed.
 - If new pattern needed → **stop**. This is feature scope. Tell the human: "This improvement requires a new UI pattern not in Design.md. Treat as /issue-feature instead, or descope to fit existing patterns."
 
-**Step 5 — Update story-N.md:**
-Rewrite the relevant acceptance criteria in place to reflect the improved behaviour. Add or update the story's `## Improvement History` section:
+**Step 5 — Update planning inputs and route through `/sprint`:**
+Update the relevant product/design context first:
+- If the improvement changes feature-level scope or language, update `product_note.md`
+- If the improvement changes screens, flows, or interactions, update `Design.md` and related design outputs first
+
+Then run `/sprint` in incremental mode so `Sprint.md`, `epic-N.md`, and `story-N.md` stay consistent.
+
+If the improvement only sharpens an existing story without changing epic/story structure, `/sprint` incremental may update just that story and its parent epic metadata.
+
+When an existing story is updated in place, add or update the story's `## Improvement History` section:
 ```markdown
 ## Improvement History
 
@@ -231,16 +267,14 @@ Description: [what was improved]
 AC rewritten: [which criterion was updated]
 ```
 
-Add or update entry in `Sprint.md` story index.
-
 **Step 6 — Execute:**
-Run `/prd` → `/dev` → `/review` → `/check` → `/uat` if UI.
+Run `/prd` using the scope produced by `/sprint` incremental → `/dev` → `/check` → `/uat` if UI.
 
 ---
 
 ## /issue-feature
 
-**Definition:** A new capability not previously in scope. Extends `product_note.md`, requires architectural assessment, may require design work, and always goes through `/sprint` to generate properly structured stories.
+**Definition:** A new capability not previously in scope. Extends `product_note.md`, assumes an existing approved design baseline is already present, re-checks architecture and design impact as needed, and then goes through `/sprint` in incremental mode to add properly structured epics and stories into the existing roadmap.
 
 ### Execution Chain
 
@@ -249,8 +283,8 @@ Run `/prd` → `/dev` → `/review` → `/check` → `/uat` if UI.
 2. Update product_note.md
 3. Architecture impact assessment → update architecture.md if needed
 4. [If UI] Design impact assessment → update Design.md + specs if needed
-5. /sprint → generates new story-N.md files
-6. Per story: /prd → /dev → /review → /check → [if UI] /uat
+5. `/sprint` incremental → generates only the new or changed epic/story files
+6. Per story: `/prd` → `/dev` → `/check` → [if UI] `/uat`
 ```
 
 ### Step-by-Step
@@ -276,14 +310,14 @@ If no changes needed → state explicitly: "No architecture changes required. Pr
 
 **Step 3 — Design impact assessment (if UI):**
 - Does the feature fit within existing Design.md patterns and components?
-  - If yes → proceed to `/sprint`.
+  - If yes → proceed to `/sprint` incremental.
   - If new screens or patterns needed → run mini design loop: update `Design.md`, update relevant design specs, prototype if new patterns are significant. Human approves before proceeding.
 
 **Step 4 — Run `/sprint`:**
-`/sprint` reads the updated `product_note.md` and `architecture.md`. It generates only the new stories for this feature — it does not regenerate existing stories. New `story-N.md` files are added and `Sprint.md` is updated with the new entries.
+`/sprint` runs in incremental mode. It reads the updated `product_note.md`, `architecture.md`, and existing roadmap files. It generates only the new or changed epics/stories for this feature — it does not regenerate unrelated existing stories. New `story-N.md` files are added and `Sprint.md` is updated in place with the new entries.
 
 **Step 5 — Execute per story:**
-For each new story: `/prd` → `/dev` → `/review` → `/check` → `/uat` if UI.
+For each new story: `/prd` → `/dev` → `/check` → `/uat` if UI.
 
 ---
 
@@ -297,7 +331,8 @@ These are the only points where the human must respond. Claude drives everything
 | Affected story confirmation | bugfix, improvement | Confirms which story-N.md is affected |
 | Architecture update approval | all types (if triggered) | Approves changes to architecture.md |
 | Design update approval | improvement, feature (if triggered) | Approves changes to Design.md + specs |
-| product_note.md update approval | feature | Confirms new feature definition |
+| product_note.md update approval | feature, improvement (if triggered) | Confirms changed feature-level scope |
+| `/sprint` scope confirmation | improvement, feature | Confirms the incremental epic/story changes before `/prd` |
 | /prd pre-flight | bugfix, improvement, feature | Confirms task breakdown before /dev |
 | /uat sign-off | UI bugfix, UI improvement, UI feature | Approves look, feel, and interaction |
 

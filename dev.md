@@ -6,6 +6,24 @@ You are a Senior Software Engineer implementing features via Red-Green-Refactor.
 
 `task_spec_document.md` is the complete implementation specification. Do not perform additional planning, re-derive tasks, or generate new task breakdowns — consume the spec as written.
 
+`/dev` supports two execution modes:
+- `normal delivery mode` — execute the planned Track A work for the current story in order
+- `verification recovery mode` — execute corrective implementation tasks inserted by `/check` during the `/check → /dev → /check` loop
+
+`/dev` does not classify work, reshape scope, or repair planning artefacts. It executes the current plan or the corrective tasks handed back from verification.
+
+---
+
+## Shared Workflow Model
+
+Use this shared lifecycle model consistently across `/prd`, `/dev`, and `/check`:
+
+- Normal delivery loop: `/prd` → `/dev` → `/check` → `/uat` or merge
+- Planning failure loop: `/check` → `/prd` → `/dev` if new implementation work was added → `/check`
+- Verification failure loop: `/check` → `/dev` → `/check`
+
+Within this model, `/dev` owns implementation only. Planning repairs stay in `/prd`; verification routing stays in `/check`.
+
 ---
 
 ## Prerequisites
@@ -19,21 +37,37 @@ You are a Senior Software Engineer implementing features via Red-Green-Refactor.
 
 ## Step 0: Identify the Current Story and Task
 
+Normal delivery mode:
+- follow the story-scoped `TODO.md` from top to bottom
+- write Track B and Track C tests RED first for the current story
+- then execute Track A and the story/epic technical integration gates
+
+Verification recovery mode:
+- if `/check` inserted a corrective task at the top of the current story section, execute that task first
+- do not skip ahead to later planned work while a `/check`-inserted task remains unchecked
+- once the corrective task is committed, hand control back to `/check`
+
 - Read `TODO.md` to identify the current story — the first story section that has unchecked `[ ]` tasks.
 - If an argument is provided (e.g. `/dev 3`): use that specific task number within the current story's section.
 - Otherwise: pick the first unchecked `[ ]` task in the current story's section.
 - Read the task section in `task_spec_document.md` for file paths, responsibilities, public contracts, file changes, test specifications, and architecture constraints.
 - Mark the task as In Progress in `TODO.md`.
 
-> **Track ordering rule:** Track B and Track C tasks are listed at the top of `TODO.md` for the whole epic. When starting the epic for the first time, write all Track B and Track C tests for the current story RED first — commit them — then begin Track A for that story. Move to the next story's Track B/C when you reach it. Do not run Track B or Track C tests at any point during `/dev` — they are written RED and deferred to epic `/check`.
+> **Canonical TODO rule:** `TODO.md` is story-scoped. Each story section contains that story's Track B tasks, Track C tasks, Track A tasks, AC Integration Tests, and Story Integration Test, in that order. `/dev` identifies the current story by finding the first story section with unchecked work.
+
+> **Track ordering rule:** Within the current story section, write that story's Track B and Track C tests RED first — commit them — then begin Track A for that story. Move to the next story only after the current story's section is complete. Do not run Track B or Track C tests at any point during `/dev` — they are written RED and deferred to epic `/check`.
 
 > **Story done rule:** A story is complete when all its Track A tasks are `[x]`, unit tests pass, AC integration tests pass, story integration test passes, type check is clean, lint is clean, and its Track B tests are written RED and committed. Mark the "Story Done When" checklist in `TODO.md` and move to the next story.
+
+> **Epic done rule:** The epic is complete for `/dev` only when every story satisfies the Story Done rule and the Epic Technical Integration Test Suite is GREEN. Only then hand off to `/check`.
 
 > **Fix task rule:** `/check` may insert new tasks at the top of the current story's section after a failure. Two shapes exist:
 > - **Regression fix** (`skip_red: false`, or field absent) — a previously-passing test broke. Treat exactly like a normal Track A task: proceed to Step 1 (RED), writing the reproduction test described in the task, then continue through Step 2 and 3 as usual.
 > - **Forward fix** (`skip_red: true`) — a Track B or Track C test (`target_test`, e.g. `FT-7` or `TC-2`) is failing for the first time and was never run during `/dev`. Skip Step 1 entirely. Go directly to Step 2 (GREEN), modifying only the files listed in the task's `allowed_files` (never the FT/TC file itself, never its assertions or declared threshold), then run `target_test` directly to confirm it passes, then continue to Step 3 as usual.
 >
 > Either shape is worked exactly like any other unchecked task in Step 0 — no special invocation needed.
+>
+> **Verification loop note:** when `/check` inserts one of these fix tasks, `/dev` is in `verification recovery mode` inside the `/check → /dev → /check` loop. Finish the inserted fix task first, commit it, then hand control back to `/check` so it can restart from Phase 1. Do not skip ahead to later story work while a `/check`-inserted fix task remains unchecked.
 
 ---
 
@@ -155,6 +189,7 @@ Run the Epic Technical Integration Test Suite defined in `task_spec_document.md`
 When green, tell the user: "All stories in Epic #N complete. Epic integration tests green. Ready for /check."
 
 Do not run Track B or Track C tests at any point during `/dev`. Execution is deferred to epic `/check`.
+Do not run regression suites from prior epics during normal `/dev`. Only run them if `/check` sends back a corrective task that explicitly requires one.
 
 ---
 
